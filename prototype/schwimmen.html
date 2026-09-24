@@ -1,0 +1,1425 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Schwimmen (31) — You vs PC</title>
+    <style>
+      :root {
+        --bg: #0e2a1a;
+        --felt: #14603a;
+        --felt-dark: #0c4327;
+        --card-bg: #fdfcf7;
+        --card-shadow: rgba(0, 0, 0, 0.45);
+        --text: #f2f7f0;
+        --gold: #f1c40f;
+        --red: #d43d3d;
+        --black: #21262b;
+        --accent: #2ecc71;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background: radial-gradient(circle at 50% 0%, #163f28, var(--bg));
+        color: var(--text);
+        padding: 18px;
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-weight: 600;
+        letter-spacing: 1px;
+      }
+      #status {
+        min-height: 24px;
+        margin: 6px 0 12px;
+        font-size: 18px;
+        text-align: center;
+        color: var(--gold);
+        max-width: 640px;
+      }
+      .lives {
+        font-size: 14px;
+        opacity: 0.85;
+        margin-bottom: 4px;
+      }
+      .zone {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        margin: 10px 0;
+      }
+      .zone-label {
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        opacity: 0.8;
+      }
+      .row {
+        display: flex;
+        gap: 14px;
+        justify-content: center;
+        min-height: 150px;
+        align-items: center;
+      }
+      .table-area {
+        background: linear-gradient(160deg, var(--felt), var(--felt-dark));
+        padding: 18px 26px;
+        border-radius: 24px;
+        box-shadow:
+          0 12px 30px rgba(0, 0, 0, 0.5),
+          inset 0 2px 6px rgba(255, 255, 255, 0.08);
+        margin: 6px 0;
+      }
+      .pools {
+        display: flex;
+        gap: 30px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .pool-block {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+      .pool-title {
+        font-size: 13px;
+        letter-spacing: 1px;
+        opacity: 0.85;
+        text-transform: uppercase;
+      }
+      .pool-divider {
+        width: 2px;
+        align-self: stretch;
+        background: rgba(255, 255, 255, 0.12);
+      }
+      .card {
+        width: 96px;
+        height: 140px;
+        background: var(--card-bg);
+        border-radius: 12px;
+        box-shadow: 0 6px 14px var(--card-shadow);
+        position: relative;
+        cursor: default;
+        user-select: none;
+        transition:
+          transform 0.28s ease,
+          box-shadow 0.28s ease;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 8px 10px;
+        color: var(--black);
+      }
+      .card.red {
+        color: var(--red);
+      }
+      .card .rank-top,
+      .card .rank-bottom {
+        font-size: 22px;
+        font-weight: 700;
+        line-height: 1;
+      }
+      .card .rank-bottom {
+        transform: rotate(180deg);
+        text-align: right;
+      }
+      .card .suit-center {
+        font-size: 40px;
+        text-align: center;
+      }
+      .card.selectable {
+        cursor: pointer;
+      }
+      .card.selectable:not(.selected):hover {
+        transform: translateY(-8px);
+        box-shadow: 0 14px 22px var(--card-shadow);
+      }
+      .card.selected {
+        transform: translateY(-14px);
+        box-shadow:
+          0 0 0 3px var(--gold),
+          0 14px 22px var(--card-shadow);
+      }
+      .card.back {
+        background: repeating-linear-gradient(
+          45deg,
+          #2b6cb0,
+          #2b6cb0 10px,
+          #234e7d 10px,
+          #234e7d 20px
+        );
+        border: 4px solid #fff;
+      }
+      .card.back .rank-top,
+      .card.back .rank-bottom,
+      .card.back .suit-center {
+        display: none;
+      }
+      .card.back .qmark {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        font-size: 46px;
+        color: rgba(255, 255, 255, 0.85);
+        font-weight: 800;
+      }
+      .card:not(.back) .qmark {
+        display: none;
+      }
+      /* PC's card being swapped — glowing lift */
+      .card.pc-target {
+        animation: pcPulse 0.6s ease-in-out infinite alternate;
+        box-shadow:
+          0 0 0 3px var(--gold),
+          0 14px 22px var(--card-shadow);
+      }
+      @keyframes pcPulse {
+        from {
+          transform: translateY(-6px) scale(1);
+        }
+        to {
+          transform: translateY(-16px) scale(1.05);
+        }
+      }
+      /* Card being revealed as it lands in the PC hand */
+      .card.flip-in {
+        animation: flipIn 0.5s ease-out;
+      }
+      @keyframes flipIn {
+        0% {
+          transform: rotateY(90deg) translateY(-14px);
+          opacity: 0.3;
+        }
+        100% {
+          transform: rotateY(0deg) translateY(0);
+          opacity: 1;
+        }
+      }
+      /* Pool card being taken/placed */
+      .card.swap-flash {
+        animation: swapFlash 0.55s ease-in-out;
+      }
+      @keyframes swapFlash {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-18px) scale(1.06);
+          box-shadow:
+            0 0 0 3px var(--accent),
+            0 16px 24px var(--card-shadow);
+        }
+      }
+      .hand-score {
+        font-size: 16px;
+        color: var(--gold);
+        font-weight: 600;
+        min-height: 20px;
+      }
+      .controls {
+        display: flex;
+        gap: 12px;
+        margin-top: 14px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      button {
+        font-family: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        padding: 10px 18px;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        background: var(--accent);
+        color: #06381f;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        transition:
+          transform 0.1s ease,
+          filter 0.1s ease;
+      }
+      button:hover:not(:disabled) {
+        filter: brightness(1.08);
+        transform: translateY(-2px);
+      }
+      button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      button.secondary {
+        background: #e0c56a;
+        color: #4a3a06;
+      }
+      button.danger {
+        background: var(--red);
+        color: #fff;
+      }
+      .controls select {
+        font-family: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        padding: 10px 14px;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        background: #123f28;
+        color: var(--accent);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+      }
+      .hint {
+        font-size: 13px;
+        opacity: 0.7;
+        margin-top: 6px;
+        max-width: 560px;
+        text-align: center;
+      }
+      .log {
+        margin-top: 12px;
+        font-size: 13px;
+        opacity: 0.75;
+        max-width: 620px;
+        text-align: center;
+        min-height: 18px;
+      }
+      .lobby {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: radial-gradient(circle at 50% 0%, #163f28, var(--bg));
+      }
+      .lobby.hidden {
+        display: none;
+      }
+      .lobby-card {
+        width: 100%;
+        max-width: 520px;
+        text-align: center;
+        padding: 34px 28px;
+        border-radius: 18px;
+        background: var(--felt-dark);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+      }
+      .lobby-card h1 {
+        font-size: 34px;
+      }
+      .lobby-sub {
+        opacity: 0.75;
+        margin: 4px 0 26px;
+      }
+      .diff-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .diff-btn {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        align-items: flex-start;
+        text-align: left;
+        padding: 16px 18px;
+        border-radius: 12px;
+        border: 1px solid transparent;
+        background: var(--felt);
+        color: var(--text);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+      }
+      .diff-btn:hover {
+        filter: brightness(1.12);
+        transform: translateY(-2px);
+        border-color: var(--gold);
+      }
+      .diff-name {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--gold);
+      }
+      .diff-desc {
+        font-size: 13px;
+        opacity: 0.82;
+      }
+      /* Select-all toggle under each pool */
+      .select-all-btn {
+        font-size: 12px;
+        font-weight: 600;
+        padding: 5px 12px;
+        border-radius: 8px;
+        background: #123f28;
+        color: var(--accent);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+      }
+      .select-all-btn .check {
+        display: inline-flex;
+        width: 16px;
+        height: 16px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--accent);
+        border-radius: 4px;
+        font-size: 11px;
+        line-height: 1;
+        opacity: 0;
+      }
+      .select-all-btn.active {
+        background: var(--accent);
+        color: #06381f;
+      }
+      .select-all-btn.active .check {
+        opacity: 1;
+        border-color: #06381f;
+      }
+      /* Lives rendered as small low cards */
+      .life-card {
+        display: inline-flex;
+        align-items: center;
+        background: var(--card-bg);
+        color: var(--black);
+        font-size: 12px;
+        font-weight: 800;
+        padding: 2px 6px;
+        border-radius: 5px;
+        margin: 0 2px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+        vertical-align: middle;
+      }
+      .swimming {
+        color: var(--gold);
+        font-style: italic;
+      }
+      /* Close button glows when a winning lay-down is available */
+      button.laydown-ready {
+        background: var(--gold);
+        color: #3a2e00;
+        animation: laydownPulse 0.8s ease-in-out infinite alternate;
+      }
+      @keyframes laydownPulse {
+        from {
+          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+        to {
+          box-shadow:
+            0 0 0 3px var(--gold),
+            0 6px 16px rgba(241, 196, 15, 0.5);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="lobby" class="lobby">
+      <div class="lobby-card">
+        <h1>Schwimmen</h1>
+        <p class="lobby-sub">31 — choose your opponent</p>
+        <div class="diff-grid">
+          <button class="diff-btn" data-diff="easy">
+            <span class="diff-name">Easy</span>
+            <span class="diff-desc"
+              >Grabs the obvious swap, never gambles, folds early.</span
+            >
+          </button>
+          <button class="diff-btn" data-diff="normal">
+            <span class="diff-name">Normal</span>
+            <span class="diff-desc"
+              >Solid greedy play with blind gambles when weak.</span
+            >
+          </button>
+          <button class="diff-btn" data-diff="hard">
+            <span class="diff-name">Hard</span>
+            <span class="diff-desc"
+              >Reads the suit you collect and plays the odds.</span
+            >
+          </button>
+        </div>
+      </div>
+    </div>
+    <h1>Schwimmen (31)</h1>
+    <div id="status">Loading…</div>
+
+    <div class="zone">
+      <div class="lives" id="pcLives">PC lives: ♥♥♥</div>
+      <div class="zone-label">Computer</div>
+      <div class="row" id="pcHand"></div>
+    </div>
+
+    <div class="zone table-area">
+      <div class="zone-label">Table pools</div>
+      <div class="pools">
+        <div class="pool-block">
+          <div class="pool-title">Face-up pool</div>
+          <div class="row" id="poolUpRow"></div>
+          <button class="select-all-btn" id="selectAllUp" data-pool="up">
+            <span class="check">✓</span> Select all
+          </button>
+        </div>
+        <div class="pool-divider"></div>
+        <div class="pool-block">
+          <div class="pool-title">Face-down pool</div>
+          <div class="row" id="poolDownRow"></div>
+          <button class="select-all-btn" id="selectAllDown" data-pool="down">
+            <span class="check">✓</span> Select all
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="zone">
+      <div class="zone-label">You</div>
+      <div class="row" id="playerHand"></div>
+      <div class="hand-score" id="playerScore"></div>
+      <div class="lives" id="playerLives">Your lives: ♥♥♥</div>
+    </div>
+
+    <div class="controls" id="schiebenControls" style="display: none">
+      <button id="keepBtn" class="secondary">Keep these three</button>
+      <button id="pushBtn">Push · take the table set</button>
+    </div>
+    <div class="controls">
+      <button id="swapBtn" disabled>Swap</button>
+      <button id="knockBtn" class="danger">Close / Knock</button>
+      <button id="menuBtn" class="secondary">Menu</button>
+      <button id="newGameBtn" style="display: none">New game</button>
+    </div>
+    <div class="hint" id="hint">
+      <b>Opening:</b> whoever starts the round first decides to <b>Keep</b> their
+      three cards or <b>Push</b> to blind-trade all three for the face-down table
+      set (revealed once you choose). Then on your turn: pick one of your cards <b>and</b> one pool card and press
+      <b>Swap</b>, or tick <b>Select all</b> under a pool to trade your whole
+      hand. The <b>face-down</b> pool is a blind swap. Press <b>Close / Knock</b>
+      when satisfied; if you hold <b>31</b> (or three aces) the button becomes
+      <b>Lay down!</b> for an instant win. Collect the highest total of a single
+      suit. Three of a kind = 30½.
+    </div>
+    <div class="log" id="log"></div>
+
+    <script>
+      const SUITS = [
+        { s: "♠", red: false },
+        { s: "♥", red: true },
+        { s: "♦", red: true },
+        { s: "♣", red: false },
+      ]
+      const RANKS = [
+        { r: "7", v: 7 },
+        { r: "8", v: 8 },
+        { r: "9", v: 9 },
+        { r: "10", v: 10 },
+        { r: "J", v: 10 },
+        { r: "Q", v: 10 },
+        { r: "K", v: 10 },
+        { r: "A", v: 11 },
+      ]
+
+      const el = {
+        status: document.getElementById("status"),
+        pcHand: document.getElementById("pcHand"),
+        poolUpRow: document.getElementById("poolUpRow"),
+        poolDownRow: document.getElementById("poolDownRow"),
+        playerHand: document.getElementById("playerHand"),
+        playerScore: document.getElementById("playerScore"),
+        pcLives: document.getElementById("pcLives"),
+        playerLives: document.getElementById("playerLives"),
+        swapBtn: document.getElementById("swapBtn"),
+        selectAllUp: document.getElementById("selectAllUp"),
+        selectAllDown: document.getElementById("selectAllDown"),
+        knockBtn: document.getElementById("knockBtn"),
+        schiebenControls: document.getElementById("schiebenControls"),
+        keepBtn: document.getElementById("keepBtn"),
+        pushBtn: document.getElementById("pushBtn"),
+        newGameBtn: document.getElementById("newGameBtn"),
+        menuBtn: document.getElementById("menuBtn"),
+        lobby: document.getElementById("lobby"),
+        hint: document.getElementById("hint"),
+        log: document.getElementById("log"),
+      }
+
+      let deck = []
+      let player = []
+      let pc = []
+      let poolUp = []
+      let poolDown = []
+      let playerLives = 3
+      let pcLives = 3
+      let selectedHandIdx = null
+      let selectedPool = null // "up" | "down"
+      let selectedPoolIdx = null
+      let selectAll = null // "up" | "down" — swap the whole hand with this pool
+      let turn = "player" // whose turn
+      let startingPlayer = "player" // who moves first this round (alternates)
+      let phase = "schieben" // "schieben" (opening keep/push) | "play"
+      let knocker = null // who knocked
+      let roundOver = false
+      let busy = false
+      let pcGambles = 0 // face-down gambles the PC has taken this round
+      let pcRevealSet = new Set() // PC hand indices to show face-up (animation)
+      let difficulty = "normal" // easy | normal | hard
+      // Hard AI opponent model: inferred per-suit interest of the human,
+      // built from the face-up cards they pick up (decays each observation).
+      let oppSuitThreat = { "♠": 0, "♥": 0, "♦": 0, "♣": 0 }
+
+      function buildDeck() {
+        const d = []
+        for (const suit of SUITS) {
+          for (const rank of RANKS) {
+            d.push({ suit: suit.s, red: suit.red, rank: rank.r, val: rank.v })
+          }
+        }
+        return d
+      }
+
+      function shuffle(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[arr[i], arr[j]] = [arr[j], arr[i]]
+        }
+        return arr
+      }
+
+      // Best single-suit / three-of-a-kind score for a 3-card hand.
+      function handScore(cards) {
+        // Three of a kind (same rank): three aces = 33, any other = 30.5
+        if (
+          cards[0].rank === cards[1].rank &&
+          cards[1].rank === cards[2].rank
+        ) {
+          return cards[0].rank === "A" ? 33 : 30.5
+        }
+        let best = 0
+        for (const suit of SUITS) {
+          let sum = 0
+          for (const c of cards) if (c.suit === suit.s) sum += c.val
+          if (sum > best) best = sum
+        }
+        return best
+      }
+
+      // 31 or 33 (three aces) ends the round instantly.
+      function isInstantWin(cards) {
+        const s = handScore(cards)
+        return s === 31 || s === 33
+      }
+
+      function deal() {
+        deck = shuffle(buildDeck())
+        player = deck.splice(0, 3)
+        poolUp = deck.splice(0, 3)
+        poolDown = deck.splice(0, 3)
+        pc = deck.splice(0, 3)
+        selectedHandIdx = null
+        selectedPool = null
+        selectedPoolIdx = null
+        selectAll = null
+        knocker = null
+        roundOver = false
+        pcGambles = 0
+        pcRevealSet = new Set()
+        oppSuitThreat = { "♠": 0, "♥": 0, "♦": 0, "♣": 0 }
+        // Each round opens with a keep/push (schieben) decision.
+        phase = "schieben"
+        // The first move alternates between rounds so the PC also opens.
+        turn = startingPlayer
+        startingPlayer = startingPlayer === "player" ? "pc" : "player"
+      }
+
+      function cardHTML(card, faceUp) {
+        const div = document.createElement("div")
+        div.className = "card" + (card.red ? " red" : "")
+        if (!faceUp) {
+          div.className += " back"
+          div.innerHTML = `<div class="qmark">?</div>`
+          return div
+        }
+        div.innerHTML = `
+          <div class="rank-top">${card.rank}${card.suit}</div>
+          <div class="suit-center">${card.suit}</div>
+          <div class="rank-bottom">${card.rank}${card.suit}</div>`
+        return div
+      }
+
+      // Live references to rendered card nodes, used for animations.
+      const nodes = { pc: [], poolUp: [], poolDown: [], player: [] }
+
+      function render(revealPc = false) {
+        const canAct = turn === "player" && !roundOver && phase === "play"
+        // During the opening keep/push, the face-up (middle) set stays hidden
+        // until the decider acts; and while the PC is the one deciding, the
+        // player's own hand is dealt face-down too.
+        const inSchieben = phase === "schieben" && !roundOver
+        const hidePlayerHand = inSchieben && turn === "pc"
+        // PC hand (face-up cards flagged in pcRevealSet flip into view)
+        el.pcHand.innerHTML = ""
+        nodes.pc = []
+        pc.forEach((c, i) => {
+          const faceUp = revealPc || pcRevealSet.has(i)
+          const node = cardHTML(c, faceUp)
+          if (pcRevealSet.has(i)) node.classList.add("flip-in")
+          el.pcHand.appendChild(node)
+          nodes.pc.push(node)
+        })
+
+        // Face-up pool (hidden during the opening decision)
+        el.poolUpRow.innerHTML = ""
+        nodes.poolUp = []
+        poolUp.forEach((c, i) => {
+          const node = cardHTML(c, !inSchieben)
+          if (canAct) {
+            node.classList.add("selectable")
+            if (selectAll === "up" || (selectedPool === "up" && i === selectedPoolIdx))
+              node.classList.add("selected")
+            node.addEventListener("click", () => onPoolClick("up", i))
+          }
+          el.poolUpRow.appendChild(node)
+          nodes.poolUp.push(node)
+        })
+
+        // Face-down pool (hidden until swapped)
+        el.poolDownRow.innerHTML = ""
+        nodes.poolDown = []
+        poolDown.forEach((c, i) => {
+          const node = cardHTML(c, false)
+          if (canAct) {
+            node.classList.add("selectable")
+            if (selectAll === "down" || (selectedPool === "down" && i === selectedPoolIdx))
+              node.classList.add("selected")
+            node.addEventListener("click", () => onPoolClick("down", i))
+          }
+          el.poolDownRow.appendChild(node)
+          nodes.poolDown.push(node)
+        })
+
+        // Player hand (dealt face-down while the PC makes its opening choice)
+        el.playerHand.innerHTML = ""
+        nodes.player = []
+        player.forEach((c, i) => {
+          const node = cardHTML(c, !hidePlayerHand)
+          if (canAct) {
+            node.classList.add("selectable")
+            if (selectAll !== null || i === selectedHandIdx)
+              node.classList.add("selected")
+            node.addEventListener("click", () => onHandClick(i))
+          }
+          el.playerHand.appendChild(node)
+          nodes.player.push(node)
+        })
+
+        // The player's own total is hidden on purpose — no free help.
+        el.playerScore.textContent = ""
+        el.pcLives.innerHTML = "Lives: " + livesHTML(pcLives)
+        el.playerLives.innerHTML = "Lives: " + livesHTML(playerLives)
+
+        const yourPlayTurn = turn === "player" && !roundOver && phase === "play"
+        const yourSchieben =
+          turn === "player" && !roundOver && phase === "schieben"
+        const canSwap =
+          yourPlayTurn &&
+          (selectAll !== null ||
+            (selectedHandIdx !== null && selectedPool !== null))
+        el.swapBtn.disabled = !canSwap
+        el.knockBtn.disabled = !yourPlayTurn
+        // During the opening keep/push, only the schieben buttons are shown.
+        el.schiebenControls.style.display = yourSchieben ? "flex" : "none"
+        el.swapBtn.style.display = yourSchieben ? "none" : ""
+        el.knockBtn.style.display = yourSchieben ? "none" : ""
+        // A ready lay-down (31 / three aces) turns Close into "Lay down!".
+        const canLayDown = yourPlayTurn && isInstantWin(player)
+        el.knockBtn.textContent = canLayDown ? "Lay down!" : "Close / Knock"
+        el.knockBtn.classList.toggle("laydown-ready", canLayDown)
+        // Select-all toggles are only shown/active on the player's play turn.
+        el.selectAllUp.style.display = yourPlayTurn ? "" : "none"
+        el.selectAllDown.style.display = yourPlayTurn ? "" : "none"
+        el.selectAllUp.classList.toggle("active", selectAll === "up")
+        el.selectAllDown.classList.toggle("active", selectAll === "down")
+      }
+
+      function fmt(n) {
+        return n === 30.5 ? "30½" : String(n)
+      }
+
+      function livesHTML(n) {
+        if (n <= 0) return `<span class="swimming">swimming — last life!</span>`
+        let out = ""
+        for (let i = 0; i < n; i++) out += `<span class="life-card">7♣</span>`
+        return out
+      }
+
+      function onHandClick(i) {
+        if (busy) return
+        selectAll = null
+        selectedHandIdx = selectedHandIdx === i ? null : i
+        render()
+      }
+
+      function onPoolClick(pool, i) {
+        if (busy) return
+        selectAll = null
+        if (selectedPool === pool && selectedPoolIdx === i) {
+          selectedPool = null
+          selectedPoolIdx = null
+        } else {
+          selectedPool = pool
+          selectedPoolIdx = i
+        }
+        render()
+      }
+
+      function toggleSelectAll(pool) {
+        if (busy) return
+        if (turn !== "player" || roundOver) return
+        selectAll = selectAll === pool ? null : pool
+        selectedHandIdx = null
+        selectedPool = null
+        selectedPoolIdx = null
+        render()
+      }
+
+      function poolArr(name) {
+        return name === "up" ? poolUp : poolDown
+      }
+
+      function wait(ms) {
+        return new Promise((res) => setTimeout(res, ms))
+      }
+
+      function setStatus(msg) {
+        el.status.textContent = msg
+      }
+      function setLog(msg) {
+        el.log.textContent = msg
+      }
+
+      function endTurn() {
+        if (roundOver) return
+        if (turn === "player") {
+          turn = "pc"
+          render()
+          setStatus("Computer is thinking…")
+          busy = true
+          setTimeout(() => pcMove(), 1300)
+        } else {
+          turn = "player"
+          busy = false
+          setStatus("Your turn.")
+          render()
+        }
+      }
+
+      // ---- Player actions ----
+      // Single entry point for both a single swap and a whole-hand swap,
+      // with a short animation so the move is readable.
+      async function performSwap() {
+        if (busy || el.swapBtn.disabled) return
+        if (turn !== "player" || roundOver) return
+        busy = true
+
+        if (selectAll) {
+          const which = selectAll === "up" ? "face-up" : "face-down"
+          const poolNodes = selectAll === "up" ? nodes.poolUp : nodes.poolDown
+          poolNodes.forEach((n) => n?.classList.add("swap-flash"))
+          nodes.player.forEach((n) => n?.classList.add("swap-flash"))
+          await wait(650)
+          if (selectAll === "up") {
+            noteOppTook(poolUp)
+            const tmp = player
+            player = poolUp
+            poolUp = tmp
+          } else {
+            const tmp = player
+            player = poolDown
+            poolDown = tmp
+          }
+          setLog(`You swapped all three cards with the ${which} pool.`)
+        } else {
+          const pool = poolArr(selectedPool)
+          const taken = pool[selectedPoolIdx]
+          const which = selectedPool === "up" ? "face-up" : "face-down"
+          nodes.player[selectedHandIdx]?.classList.add("swap-flash")
+          const pn = selectedPool === "up" ? nodes.poolUp : nodes.poolDown
+          pn[selectedPoolIdx]?.classList.add("swap-flash")
+          await wait(650)
+          const tmp = player[selectedHandIdx]
+          player[selectedHandIdx] = pool[selectedPoolIdx]
+          pool[selectedPoolIdx] = tmp
+          if (selectedPool === "up") noteOppTook([taken])
+          setLog(`You swapped a card with the ${which} pool.`)
+        }
+
+        selectedHandIdx = null
+        selectedPool = null
+        selectedPoolIdx = null
+        selectAll = null
+        busy = false
+        afterPlayerAction()
+      }
+
+      el.swapBtn.addEventListener("click", performSwap)
+      el.selectAllUp.addEventListener("click", () => toggleSelectAll("up"))
+      el.selectAllDown.addEventListener("click", () => toggleSelectAll("down"))
+      el.keepBtn.addEventListener("click", () => onPlayerSchieben("keep"))
+      el.pushBtn.addEventListener("click", () => onPlayerSchieben("push"))
+
+      el.knockBtn.addEventListener("click", () => {
+        if (el.knockBtn.disabled) return
+        // Manual lay-down: holding 31 (or three aces) closes as an instant win.
+        if (isInstantWin(player)) {
+          setLog(`You lay down ${fmt(handScore(player))} — instant win!`)
+          finishRound("playerWin")
+          return
+        }
+        if (knocker !== null) {
+          // The computer already knocked — standing ends the round now.
+          setLog("You stand. Showdown!")
+          finishRound("showdown")
+          return
+        }
+        knocker = "player"
+        setLog("You knocked — the computer gets one last move.")
+        turn = "pc"
+        render()
+        setStatus("Computer's final move…")
+        busy = true
+        setTimeout(() => pcMove(true), 1300)
+      })
+
+      function afterPlayerAction() {
+        // No auto-win at 31/33 — laying down is now a manual choice.
+        if (knocker === "pc") {
+          // You just made your final move after the PC knocked.
+          finishRound("showdown")
+          return
+        }
+        if (knocker === "player") {
+          // You knocked earlier; the PC gets exactly one more move.
+          turn = "pc"
+          render()
+          setStatus("Computer's final move…")
+          busy = true
+          setTimeout(() => pcMove(true), 1300)
+          return
+        }
+        endTurn()
+      }
+
+      // ---- Opening keep/push (schieben) ----
+      // The round's opener either keeps the dealt three or pushes them for
+      // the face-up table set. This counts as their opening action; regular
+      // play then begins with the opponent.
+      async function onPlayerSchieben(action) {
+        if (busy || roundOver) return
+        if (turn !== "player" || phase !== "schieben") return
+        busy = true
+        if (action === "push") {
+          nodes.poolUp.forEach((n) => n?.classList.add("swap-flash"))
+          nodes.player.forEach((n) => n?.classList.add("swap-flash"))
+          await wait(650)
+          noteOppTook(poolUp)
+          const tmp = player
+          player = poolUp
+          poolUp = tmp
+          setLog("You pushed — traded all three for the table set.")
+        } else {
+          setLog("You kept your three cards.")
+        }
+        // Feuer: opening straight into 31 (or three aces) lets you keep the
+        // turn and lay down at once instead of handing over to the PC.
+        if (isInstantWin(player)) {
+          phase = "play"
+          selectedHandIdx = null
+          selectedPool = null
+          selectedPoolIdx = null
+          selectAll = null
+          busy = false
+          setStatus(`You have ${fmt(handScore(player))} — press Lay down!`)
+          render()
+          return
+        }
+        finishSchieben()
+      }
+
+      async function pcSchieben() {
+        busy = true
+        const keepScore = handScore(pc)
+        const pushScore = handScore(poolUp)
+        // Push only when the visible table set is clearly stronger.
+        if (pushScore > keepScore + 1) {
+          setLog("Computer pushed — took the table set.")
+          await animatePcSwap("up", -1, -1, true)
+        } else {
+          setStatus("Computer keeps its hand…")
+          await wait(1000)
+          setLog("Computer kept its three cards.")
+        }
+        // Computer lays down immediately if the opening gave it a winner.
+        if (isInstantWin(pc)) {
+          phase = "play"
+          finishRound("pcWin")
+          return
+        }
+        finishSchieben()
+      }
+
+      // Move from the opening decision into regular play; the opponent of the
+      // opener takes the first normal turn.
+      function finishSchieben() {
+        phase = "play"
+        selectedHandIdx = null
+        selectedPool = null
+        selectedPoolIdx = null
+        selectAll = null
+        turn = turn === "player" ? "pc" : "player"
+        busy = false
+        render()
+        if (turn === "pc") {
+          setStatus("Computer is thinking…")
+          busy = true
+          setTimeout(() => pcMove(), 1300)
+        } else {
+          setStatus("Your turn.")
+        }
+      }
+
+      // ---- Computer AI ----
+      // The PC plays the visible (face-up) pool only — the face-down pool
+      // stays a blind gamble reserved for the human player.
+      // With `denial`, single swaps are lightly penalised for handing the
+      // human a card in a suit they appear to be collecting.
+      function bestSwapForPc(denial = false) {
+        let baseline = handScore(pc)
+        let best = { gain: 0, hi: -1, ti: -1, all: false, score: baseline }
+        let bestEff = baseline
+        for (let h = 0; h < 3; h++) {
+          for (let t = 0; t < 3; t++) {
+            const newPc = pc.slice()
+            newPc[h] = poolUp[t]
+            const sc = handScore(newPc)
+            // We'd discard pc[h] into the face-up pool where the human sees it.
+            const eff = denial ? sc - denialCost(pc[h]) : sc
+            if (sc > baseline && eff > bestEff) {
+              bestEff = eff
+              best = {
+                gain: sc - baseline,
+                hi: h,
+                ti: t,
+                all: false,
+                score: sc,
+              }
+            }
+          }
+        }
+        // Consider swapping all three with the face-up pool
+        const scAll = handScore(poolUp)
+        if (scAll > best.score) {
+          best = {
+            gain: scAll - baseline,
+            hi: -1,
+            ti: -1,
+            all: true,
+            score: scAll,
+          }
+        }
+        return best
+      }
+
+      // ---- Hard AI: opponent modelling & odds ----
+      function cardKey(c) {
+        return c.rank + c.suit
+      }
+
+      // Record face-up cards the human just took; recent picks weigh most.
+      function noteOppTook(cards) {
+        for (const s in oppSuitThreat) oppSuitThreat[s] *= 0.5
+        for (const c of cards) oppSuitThreat[c.suit] += c.val
+      }
+
+      // Rough guess of the human's best-suit total from what they've grabbed.
+      function estimatedOppScore() {
+        let max = 0
+        for (const s in oppSuitThreat)
+          if (oppSuitThreat[s] > max) max = oppSuitThreat[s]
+        // A taken high card usually joins existing cards of that suit; pad it,
+        // and never assume the opponent is totally helpless (floor ~20).
+        return max > 0 ? Math.min(31, max + 6) : 20
+      }
+
+      // Penalty for discarding a card the human seems to want.
+      function denialCost(card) {
+        return oppSuitThreat[card.suit] > 0 ? card.val * 0.3 : 0
+      }
+
+      // Cards the PC hasn't seen (not in its hand, not in the face-up pool).
+      function unseenCards() {
+        const seen = new Set([...pc, ...poolUp].map(cardKey))
+        return buildDeck().filter((c) => !seen.has(cardKey(c)))
+      }
+
+      // Expected hand score after blindly replacing the PC's worst card.
+      function expectedGambleScore() {
+        const gi = worstHandIndex(pc)
+        const pool = unseenCards()
+        if (!pool.length) return handScore(pc)
+        let sum = 0
+        for (const c of pool) {
+          const trial = pc.slice()
+          trial[gi] = c
+          sum += handScore(trial)
+        }
+        return sum / pool.length
+      }
+
+      // Index of the hand card least useful to keep (outside the best suit,
+      // lowest value) — used when the PC gambles on the face-down pool.
+      function worstHandIndex(cards) {
+        let bestSuit = null
+        let best = -1
+        for (const suit of SUITS) {
+          let s = 0
+          for (const c of cards) if (c.suit === suit.s) s += c.val
+          if (s > best) {
+            best = s
+            bestSuit = suit.s
+          }
+        }
+        let idx = 0
+        let low = Infinity
+        for (let i = 0; i < 3; i++) {
+          const c = cards[i]
+          const score = c.val + (c.suit === bestSuit ? 100 : 0)
+          if (score < low) {
+            low = score
+            idx = i
+          }
+        }
+        return idx
+      }
+
+      // Animate the PC taking card(s) from a pool ("up" or "down").
+      async function animatePcSwap(poolName, hi, ti, all) {
+        const poolNodes = () =>
+          poolName === "up" ? nodes.poolUp : nodes.poolDown
+        const takeIdx = all ? [0, 1, 2] : [ti]
+        const pcIdx = all ? [0, 1, 2] : [hi]
+        // 1) Highlight what the PC is eyeing.
+        takeIdx.forEach((t) => poolNodes()[t]?.classList.add("swap-flash"))
+        pcIdx.forEach((h) => nodes.pc[h]?.classList.add("pc-target"))
+        setStatus("Computer is making its move…")
+        await wait(1000)
+
+        // 2) Perform the swap in data.
+        if (all) {
+          if (poolName === "up") {
+            const tmp = pc
+            pc = poolUp
+            poolUp = tmp
+          } else {
+            const tmp = pc
+            pc = poolDown
+            poolDown = tmp
+          }
+        } else {
+          const pool = poolName === "up" ? poolUp : poolDown
+          const tmp = pc[hi]
+          pc[hi] = pool[ti]
+          pool[ti] = tmp
+        }
+
+        // 3) Show what happened. Only a face-up swap reveals the PC's new
+        //    card(s) — a face-down gamble stays hidden so the human never
+        //    learns what the computer picked up.
+        if (poolName === "up") {
+          pcRevealSet = new Set(pcIdx)
+        }
+        render()
+        takeIdx.forEach((t) => poolNodes()[t]?.classList.add("swap-flash"))
+        await wait(1300)
+
+        // 4) Hide the PC cards again.
+        pcRevealSet = new Set()
+        render()
+      }
+
+      async function knockAsPc() {
+        knocker = "pc"
+        setLog("Computer knocks — make your final move.")
+        turn = "player"
+        busy = false
+        setStatus("Computer knocked — swap once more or stand.")
+        render()
+      }
+
+      async function pcMove(isFinal = false) {
+        busy = true
+        // Already holding a winning hand — reveal at once, no knock.
+        if (isInstantWin(pc)) {
+          finishRound("pcWin")
+          return
+        }
+        // Forced final move (someone knocked): grab the best improving swap
+        // if one exists, otherwise just reveal at showdown.
+        if (isFinal || knocker === "player") {
+          await pcFinalMove()
+          return
+        }
+        if (difficulty === "easy") return pcTurnEasy()
+        if (difficulty === "hard") return pcTurnHard()
+        return pcTurnNormal()
+      }
+
+      async function pcFinalMove() {
+        const move = bestSwapForPc(difficulty === "hard")
+        if (move.score > handScore(pc)) {
+          setLog(
+            move.all
+              ? "Computer swaps all three from the face-up pool."
+              : "Computer swaps a card from the face-up pool.",
+          )
+          await animatePcSwap("up", move.hi, move.ti, move.all)
+        }
+        if (isInstantWin(pc)) {
+          finishRound("pcWin")
+          return
+        }
+        finishRound("showdown")
+      }
+
+      // Easy: greedy on the face-up pool, never gambles, knocks eagerly.
+      // One action per turn: either swap OR knock, never both.
+      async function pcTurnEasy() {
+        const move = bestSwapForPc()
+        if (move.score > handScore(pc)) {
+          setLog(
+            move.all
+              ? "Computer swaps all three from the face-up pool."
+              : "Computer swaps a card from the face-up pool.",
+          )
+          await animatePcSwap("up", move.hi, move.ti, move.all)
+          if (isInstantWin(pc)) {
+            finishRound("pcWin")
+            return
+          }
+          endTurn()
+          return
+        }
+        // Nothing to gain from the pool — stand.
+        knockAsPc()
+      }
+
+      // Normal: greedy improve, knock when strong, blind-gamble when weak.
+      // One action per turn: either swap OR knock, never both.
+      async function pcTurnNormal() {
+        const s = handScore(pc)
+
+        // Strong enough to stand pat — knock instead of swapping.
+        if (s >= 24) {
+          knockAsPc()
+          return
+        }
+
+        const move = bestSwapForPc()
+        if (move.score > s) {
+          setLog(
+            move.all
+              ? "Computer swaps all three from the face-up pool."
+              : "Computer swaps a card from the face-up pool.",
+          )
+          await animatePcSwap("up", move.hi, move.ti, move.all)
+          if (isInstantWin(pc)) {
+            finishRound("pcWin")
+            return
+          }
+          endTurn()
+          return
+        }
+
+        // No face-up improvement — knock if decent, else gamble, else knock.
+        if (s >= 22) {
+          knockAsPc()
+          return
+        }
+        if (pcGambles < 2) {
+          pcGambles++
+          const gi = worstHandIndex(pc)
+          const ti = Math.floor(Math.random() * 3)
+          setLog("Computer gambles on the face-down pool.")
+          await animatePcSwap("down", gi, ti, false)
+          if (isInstantWin(pc)) {
+            finishRound("pcWin")
+            return
+          }
+          endTurn()
+          return
+        }
+        knockAsPc()
+      }
+
+      // Hard: reads the human's suit, gambles on odds, knocks on equity.
+      // One action per turn: either swap OR knock, never both.
+      async function pcTurnHard() {
+        const s = handScore(pc)
+        const estOpp = estimatedOppScore()
+
+        // Stand pat if strong outright or clearly ahead of the read.
+        if (s >= 26 || (s >= 20 && s >= estOpp + 2)) {
+          knockAsPc()
+          return
+        }
+
+        const move = bestSwapForPc(true) // denial-aware
+        if (move.score > s) {
+          setLog(
+            move.all
+              ? "Computer swaps all three from the face-up pool."
+              : "Computer swaps a card from the face-up pool.",
+          )
+          await animatePcSwap("up", move.hi, move.ti, move.all)
+          if (isInstantWin(pc)) {
+            finishRound("pcWin")
+            return
+          }
+          endTurn()
+          return
+        }
+
+        // No visible help — gamble only when the odds actually favour it.
+        if (
+          s < 26 &&
+          pcGambles < 2 &&
+          expectedGambleScore() > s + 1 &&
+          s < estOpp + 2
+        ) {
+          pcGambles++
+          const gi = worstHandIndex(pc)
+          const ti = Math.floor(Math.random() * 3)
+          setLog("Computer gambles on the face-down pool.")
+          await animatePcSwap("down", gi, ti, false)
+          if (isInstantWin(pc)) {
+            finishRound("pcWin")
+            return
+          }
+          endTurn()
+          return
+        }
+
+        // Can't improve and out of good gambles — lock in the hand.
+        knockAsPc()
+      }
+
+      // ---- Round resolution ----
+      function finishRound(reason) {
+        roundOver = true
+        busy = false
+        render(true)
+        const ps = handScore(player)
+        const cs = handScore(pc)
+
+        let loserMsg = ""
+        if (reason === "playerWin") {
+          pcLives--
+          loserMsg = `You hit ${fmt(ps)}! Computer loses a life.`
+        } else if (reason === "pcWin") {
+          playerLives--
+          loserMsg = `Computer hit ${fmt(cs)}! You lose a life.`
+        } else {
+          // showdown — lower hand loses a life; tie = no one loses
+          if (ps < cs) {
+            playerLives--
+            loserMsg = `Showdown: you ${fmt(ps)} vs PC ${fmt(cs)}. You lose a life.`
+          } else if (cs < ps) {
+            pcLives--
+            loserMsg = `Showdown: you ${fmt(ps)} vs PC ${fmt(cs)}. Computer loses a life.`
+          } else {
+            loserMsg = `Showdown: tie at ${fmt(ps)}. No one loses a life.`
+          }
+        }
+
+        setLog(loserMsg)
+
+        // Check for game over (a player loses when out of lives AND loses again)
+        if (playerLives < 0 || pcLives < 0) {
+          const youWon = pcLives < 0
+          setStatus(
+            (youWon
+              ? "🎉 You win the game!"
+              : "💀 The computer wins the game.") +
+              " " +
+              loserMsg,
+          )
+          el.newGameBtn.style.display = ""
+          el.swapBtn.disabled = true
+          el.knockBtn.disabled = true
+          return
+        }
+
+        setStatus(loserMsg + " Next round starting…")
+        setTimeout(() => {
+          deal()
+          beginRound()
+        }, 2400)
+      }
+
+      // Set up the UI for a fresh round; the opener makes the keep/push
+      // decision first, then regular play begins.
+      function beginRound() {
+        busy = false
+        render()
+        if (roundOver) return
+        if (turn === "pc") {
+          setStatus("Computer is looking at its hand…")
+          busy = true
+          setTimeout(() => pcSchieben(), 1400)
+        } else {
+          setStatus("Opening: keep your three cards, or push for the table set.")
+        }
+      }
+
+      el.newGameBtn.addEventListener("click", () => {
+        showLobby()
+      })
+
+      el.menuBtn.addEventListener("click", () => {
+        showLobby()
+      })
+
+      // ---- Lobby ----
+      function showLobby() {
+        el.lobby.classList.remove("hidden")
+      }
+
+      function startGame(level) {
+        difficulty = level
+        el.lobby.classList.add("hidden")
+        playerLives = 3
+        pcLives = 3
+        startingPlayer = "player"
+        el.newGameBtn.style.display = "none"
+        deal()
+        beginRound()
+      }
+
+      el.lobby.querySelectorAll(".diff-btn").forEach((btn) => {
+        btn.addEventListener("click", () => startGame(btn.dataset.diff))
+      })
+
+      // ---- Start ----
+      showLobby()
+      deal()
+      render()
+    </script>
+  </body>
+</html>
