@@ -256,6 +256,7 @@ full state exists only on the server.
 | 2 — Rooms & lobby | ✅ Done | Fixed seats, host controls (seat count, add/remove bot, per-bot difficulty, kick), ready/start, back to lobby |
 | 3 — Core gameplay | ✅ Done | Server-driven deal → schieben → play → knock → showdown → next round; personalized `game:state`; resume token (reload/reconnect keeps your seat); seats arranged around the table rim. Bots use a placeholder greedy AI. Rules: max 8 players; lay-down costs the lowest other hand a life; full showdown tie = no loss |
 | 4 — Bots | ✅ Done | easy = greedy face-up only; normal = prototype AI (knock 24+, swap, else ≤2 blind gambles); hard = Monte-Carlo lookahead (100 sampled deals, opponents keep face-up cards they took) — ~62% vs normal heads-up, ~3 ms/move. Blind push decided on expected value (face-up set is hidden in the opening). Think delay 600–1400 ms. A disconnected human's turn is played by a normal stand-in after 15 s; the seat stays theirs. Prototype's suit-threat "hard" lost to normal in simulation, so it was replaced |
+| 4.5 — Main menu | ✅ Done | Home screen "Welcome to Hosn Obe" with Play online (create/join rooms), Practice (offline: the shared engine + bots run on the device, no server needed; table pre-filled with normal bots) and Settings (placeholder). Player name remembered in `localStorage` |
 | 5 — N players + lives | ⬜ Not started | |
 | 6 — Native plugins & polish | ⬜ Not started | |
 | 7 — Mobile resilience | ⬜ Not started | |
@@ -300,6 +301,14 @@ full state exists only on the server.
 
 - Server bot driver, difficulty levels, thinking delay.
 - Fill empty seats; auto-bot on disconnect.
+
+### Phase 4.5 — Main menu
+
+- Home screen: "Welcome to Hosn Obe" with **Play online**, **Practice**, **Settings**.
+- Play online → the existing create/join room screen.
+- Practice → an **offline** table with only bots (adjustable seats/levels), run locally by
+  the shared engine with the same bot/round pacing as the server.
+- Settings → placeholder for now.
 
 ### Phase 5 — N players + lives/elimination
 

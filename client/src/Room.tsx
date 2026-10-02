@@ -8,7 +8,7 @@ import {
   type RoomState,
 } from "@hosn-obe/shared";
 
-import { socket } from "./socket.js";
+import type { RoomCommands } from "./commands.js";
 import { useServerError } from "./useServerError.js";
 
 const SEAT_COUNTS = Array.from(
@@ -20,10 +20,14 @@ const SEAT_COUNTS = Array.from(
 export function Room({
   room,
   youId,
+  commands,
+  practice = false,
   onLeave,
 }: {
   room: RoomState;
   youId: string | null;
+  commands: RoomCommands;
+  practice?: boolean;
   onLeave: () => void;
 }) {
   const error = useServerError();
@@ -37,18 +41,23 @@ export function Room({
   return (
     <div className="panel">
       <div className="room-header">
-        <div>
-          <span className="label">Room code</span>
-          <span className="code">{room.code}</span>
-        </div>
+        {practice ? (
+          <div>
+            <span className="label">Practice</span>
+            <span className="room-title">You vs. bots</span>
+          </div>
+        ) : (
+          <div>
+            <span className="label">Room code</span>
+            <span className="code">{room.code}</span>
+          </div>
+        )}
         {isHost && inLobby ? (
           <label className="inline-field">
             <span>Seats</span>
             <select
               value={room.maxPlayers}
-              onChange={(e) =>
-                socket.emit("room:setMaxPlayers", { maxPlayers: Number(e.target.value) })
-              }
+              onChange={(e) => commands.setMaxPlayers(Number(e.target.value))}
             >
               {SEAT_COUNTS.map((n) => (
                 <option key={n} value={n} disabled={n < seatedPlayers(room).length}>
@@ -76,19 +85,14 @@ export function Room({
               player={p}
               isYou={p.id === youId}
               canEdit={isHost && inLobby && !p.isHost}
-              onRemove={() =>
-                socket.emit(p.isBot ? "room:removeBot" : "room:kick", { seatIdx })
-              }
-              onLevel={(level) => socket.emit("room:setBotLevel", { seatIdx, level })}
+              onRemove={() => (p.isBot ? commands.removeBot(seatIdx) : commands.kick(seatIdx))}
+              onLevel={(level) => commands.setBotLevel(seatIdx, level)}
             />
           ) : (
             <li key={`empty-${seatIdx}`} className="player player--empty">
               <span className="player-name">Empty seat</span>
               {isHost && inLobby && seatIdx === nextFree && (
-                <button
-                  className="btn-small"
-                  onClick={() => socket.emit("room:addBot", { seatIdx, level: "normal" })}
-                >
+                <button className="btn-small" onClick={() => commands.addBot(seatIdx, "normal")}>
                   + Bot
                 </button>
               )}
@@ -100,7 +104,7 @@ export function Room({
       {inLobby && isHost && (
         <>
           <div className="row">
-            <button disabled={blocker !== null} onClick={() => socket.emit("room:start")}>
+            <button disabled={blocker !== null} onClick={() => commands.start()}>
               Start game
             </button>
           </div>
@@ -112,7 +116,7 @@ export function Room({
         <div className="row">
           <button
             className={me.ready ? "secondary" : undefined}
-            onClick={() => socket.emit("room:setReady", { ready: !me.ready })}
+            onClick={() => commands.setReady(!me.ready)}
           >
             {me.ready ? "Not ready" : "Ready"}
           </button>
@@ -121,7 +125,7 @@ export function Room({
 
       {!inLobby && isHost && (
         <div className="row">
-          <button onClick={() => socket.emit("room:returnToLobby")}>Back to lobby</button>
+          <button onClick={() => commands.returnToLobby()}>Back to lobby</button>
         </div>
       )}
 
@@ -129,7 +133,7 @@ export function Room({
 
       <div className="row row--spaced">
         <button className="secondary" onClick={onLeave}>
-          Leave room
+          {practice ? "Quit practice" : "Leave room"}
         </button>
       </div>
     </div>

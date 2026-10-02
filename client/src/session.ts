@@ -12,3 +12,13 @@ export function saveToken(token: string): void {
 export function clearToken(): void {
   sessionStorage.removeItem(KEY);
 }
+
+const NAME_KEY = "hosnobe.name";
+
+export function loadName(): string {
+  return localStorage.getItem(NAME_KEY) ?? "";
+}
+
+export function saveName(name: string): void {
+  localStorage.setItem(NAME_KEY, name.trim());
+}

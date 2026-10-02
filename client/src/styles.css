@@ -37,6 +37,7 @@ body {
 }
 
 .status {
+  margin-left: auto;
   font-size: 0.75rem;
   padding: 2px 8px;
   border-radius: 999px;
@@ -48,6 +49,10 @@ body {
 .status--off {
   background: rgba(255, 107, 107, 0.2);
   color: var(--error);
+}
+.status--practice {
+  background: rgba(140, 160, 255, 0.2);
+  color: #8ca0ff;
 }
 
 .panel {
@@ -553,4 +558,86 @@ button.laydown {
     animation: none;
     transition: none;
   }
+}
+
+.panel-title {
+  margin: 0 0 16px;
+  font-size: 1.2rem;
+}
+.room-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+.hint--left {
+  text-align: left;
+}
+
+.hero {
+  text-align: center;
+  padding: 32px 0 36px;
+}
+.hero-suits {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  font-size: 1.6rem;
+  color: var(--text);
+  opacity: 0.85;
+}
+.hero-suits .red {
+  color: #e05555;
+}
+.hero-welcome {
+  margin: 18px 0 4px;
+  color: var(--muted);
+  font-size: 0.95rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.hero-title {
+  margin: 0;
+  font-size: 2.8rem;
+  letter-spacing: 1px;
+  background: linear-gradient(180deg, #fff 0%, #f1c40f 140%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+button.menu-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px;
+  border-radius: 14px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+  transition: transform 0.1s ease;
+}
+button.menu-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.menu-btn-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.menu-btn-sub {
+  font-size: 0.8rem;
+  font-weight: 500;
+  opacity: 0.75;
+}
+button.menu-btn--alt {
+  background: #8ca0ff;
+  color: #0d1640;
+}
+button.menu-btn--plain {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid #2b3153;
+  box-shadow: none;
 }

@@ -2,18 +2,21 @@ import { useState } from "react";
 
 import { ROOM_LIMITS, type RoomActionResult } from "@hosn-obe/shared";
 
+import { loadName, saveName } from "./session.js";
 import { socket } from "./socket.js";
 
 /** Create or join a room. On success the parent receives your player id; the
  * room contents arrive via the broadcast `room:state` event. */
 export function Lobby({
   onJoined,
+  onBack,
   notice,
 }: {
   onJoined: (youId: string, token: string) => void;
+  onBack: () => void;
   notice: string | null;
 }) {
-  const [name, setName] = useState("");
+  const [name, setName] = useState(loadName);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -31,17 +34,20 @@ export function Lobby({
   function createRoom() {
     setBusy(true);
     setError(null);
+    saveName(name);
     socket.emit("room:create", { name }, handleResult);
   }
 
   function joinRoom() {
     setBusy(true);
     setError(null);
+    saveName(name);
     socket.emit("room:join", { code, name }, handleResult);
   }
 
   return (
     <div className="panel">
+      <h2 className="panel-title">Play online</h2>
       {notice && <p className="notice">{notice}</p>}
       <label className="field">
         <span>Your name</span>
@@ -77,6 +83,12 @@ export function Lobby({
       </div>
 
       {error && <p className="error">{error}</p>}
+
+      <div className="row row--spaced">
+        <button className="secondary" onClick={onBack}>
+          Back
+        </button>
+      </div>
     </div>
   );
 }

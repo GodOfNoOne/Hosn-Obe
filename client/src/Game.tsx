@@ -12,7 +12,7 @@ import {
 } from "@hosn-obe/shared";
 
 import { CardView, Lives } from "./Card.js";
-import { socket } from "./socket.js";
+import type { RoomCommands } from "./commands.js";
 import { useServerError } from "./useServerError.js";
 
 const POOL_LABEL: Record<PoolName, string> = { up: "face-up", down: "face-down" };
@@ -108,11 +108,13 @@ export function Game({
   view,
   room,
   isHost,
+  commands,
   onLeave,
 }: {
   view: GameView;
   room: RoomState;
   isHost: boolean;
+  commands: RoomCommands;
   onLeave: () => void;
 }) {
   const error = useServerError();
@@ -137,7 +139,7 @@ export function Game({
   const ev = view.lastEvent;
 
   function act(action: GameAction) {
-    socket.emit("game:action", action);
+    commands.act(action);
   }
 
   function swap() {
@@ -314,7 +316,7 @@ export function Game({
 
       <div className="row row--spaced">
         {isHost && (
-          <button className="secondary" onClick={() => socket.emit("room:returnToLobby")}>
+          <button className="secondary" onClick={() => commands.returnToLobby()}>
             {view.phase === "gameEnd" ? "Back to lobby" : "End game"}
           </button>
         )}

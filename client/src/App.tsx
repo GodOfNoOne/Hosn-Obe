@@ -2,24 +2,34 @@ import { useEffect, useRef, useState } from "react";
 
 import type { GameView, RoomActionResult, RoomState } from "@hosn-obe/shared";
 
+import { socketCommands } from "./commands.js";
 import { Game } from "./Game.js";
+import { Home } from "./Home.js";
 import { Lobby } from "./Lobby.js";
+import { PRACTICE_YOU_ID, PracticeTable, type PracticeSnapshot } from "./practice.js";
 import { Room } from "./Room.js";
-import { clearToken, loadToken, saveToken } from "./session.js";
+import { clearToken, loadName, loadToken, saveToken } from "./session.js";
+import { Settings } from "./Settings.js";
 import { socket } from "./socket.js";
+
+type Screen = "home" | "online" | "settings";
 
 export function App() {
   const [connected, setConnected] = useState(socket.connected);
+  const [screen, setScreen] = useState<Screen>("home");
   const [room, setRoom] = useState<RoomState | null>(null);
   const [game, setGame] = useState<GameView | null>(null);
   const [youId, setYouId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [practice, setPractice] = useState<PracticeTable | null>(null);
+  const [practiceSnap, setPracticeSnap] = useState<PracticeSnapshot | null>(null);
   const roomRef = useRef(room);
   roomRef.current = room;
 
   useEffect(() => {
     function exitRoom(message: string | null) {
       clearToken();
+      if (roomRef.current) setScreen("online");
       setRoom(null);
       setGame(null);
       setNotice(message);
@@ -68,25 +78,78 @@ export function App() {
   function handleLeave() {
     socket.emit("room:leave");
     clearToken();
+    setScreen("online");
     setRoom(null);
     setGame(null);
   }
 
+  function startPractice() {
+    const table = new PracticeTable(loadName() || "Player", setPracticeSnap);
+    setPractice(table);
+    setPracticeSnap(table.snapshot());
+  }
+
+  function leavePractice() {
+    practice?.dispose();
+    setPractice(null);
+    setPracticeSnap(null);
+    setScreen("home");
+  }
+
+  const home = !practice && !room && screen === "home";
+
   return (
     <div className="app">
       <header className="topbar">
-        <h1>Hosn Obe</h1>
-        <span className={`status ${connected ? "status--on" : "status--off"}`}>
-          {connected ? "connected" : room ? "reconnecting…" : "offline"}
-        </span>
+        {!home && <h1>Hosn Obe</h1>}
+        {practice ? (
+          <span className="status status--practice">practice</span>
+        ) : (
+          <span className={`status ${connected ? "status--on" : "status--off"}`}>
+            {connected ? "connected" : room ? "reconnecting…" : "offline"}
+          </span>
+        )}
       </header>
 
-      {room && room.phase === "playing" && game ? (
-        <Game view={game} room={room} isHost={room.hostId === youId} onLeave={handleLeave} />
+      {practice && practiceSnap ? (
+        practiceSnap.room.phase === "playing" && practiceSnap.view ? (
+          <Game
+            view={practiceSnap.view}
+            room={practiceSnap.room}
+            isHost
+            commands={practice}
+            onLeave={leavePractice}
+          />
+        ) : (
+          <Room
+            room={practiceSnap.room}
+            youId={PRACTICE_YOU_ID}
+            commands={practice}
+            practice
+            onLeave={leavePractice}
+          />
+        )
+      ) : room && room.phase === "playing" && game ? (
+        <Game
+          view={game}
+          room={room}
+          isHost={room.hostId === youId}
+          commands={socketCommands}
+          onLeave={handleLeave}
+        />
       ) : room ? (
-        <Room room={room} youId={youId} onLeave={handleLeave} />
+        <Room room={room} youId={youId} commands={socketCommands} onLeave={handleLeave} />
+      ) : screen === "online" ? (
+        <Lobby onJoined={handleJoined} onBack={() => setScreen("home")} notice={notice} />
+      ) : screen === "settings" ? (
+        <Settings onBack={() => setScreen("home")} />
       ) : (
-        <Lobby onJoined={handleJoined} notice={notice} />
+        <Home
+          onOnline={() => setScreen("online")}
+          onPractice={startPractice}
+          onSettings={() => setScreen("settings")}
+          notice={notice}
+        />
       )}
     </div>
   );
