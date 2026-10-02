@@ -51,6 +51,10 @@ cp client/.env.example client/.env      # set VITE_SERVER_URL for a hosted serve
 Open two browser tabs at the client URL: create a room in one, join with the
 code in the other, and watch the seat list sync in real time.
 
+> For the full hands-on runbook — starting the server, simulating on a PC, and
+> simulating on a real phone or emulator (wireless debugging, LAN IP, firewall,
+> install) — see [docs/RUNNING.md](docs/RUNNING.md).
+
 ## Android (Capacitor)
 
 Capacitor is configured (`client/capacitor.config.ts`) but the native project
