@@ -49,8 +49,11 @@ function describeEvent(view: GameView, ev: GameEvent): string {
   }
 }
 
-function prompt(view: GameView, yourTurn: boolean): string {
+function prompt(view: GameView, yourTurn: boolean, turnOffline: boolean): string {
   const turnName = nameOf(view, view.turnIdx);
+  if (turnOffline && (view.phase === "schieben" || view.phase === "play")) {
+    return `${turnName} is offline — a bot will move for them shortly…`;
+  }
   if (view.phase === "schieben") {
     return yourTurn
       ? "Opening: keep your three cards, or push them for the hidden table set."
@@ -200,7 +203,7 @@ export function Game({
   return (
     <div className="game">
       <p className="game-status" aria-live="polite">
-        {prompt(view, yourTurn)}
+        {prompt(view, yourTurn, offline.has(view.players[view.turnIdx]?.id ?? ""))}
       </p>
 
       <div className={`table ${view.players.length >= 6 ? "table--large" : ""}`}>

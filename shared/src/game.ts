@@ -50,6 +50,10 @@ export interface GamePlayer {
   lives: number;
   out: boolean;
   hand: Card[];
+  /** Face-up cards taken this round, one group per move (public: everyone saw them). */
+  takenUp: Card[][];
+  /** Face-down swaps this round. */
+  gambles: number;
 }
 
 export interface GameState {
@@ -81,7 +85,14 @@ export function createGame(seats: readonly GameSeat[], rng: Rng = Math.random): 
     throw new GameError(`Games need 2–${MAX_GAME_PLAYERS} players.`);
   }
   const state: GameState = {
-    players: seats.map((s) => ({ ...s, lives: START_LIVES, out: false, hand: [] })),
+    players: seats.map((s) => ({
+      ...s,
+      lives: START_LIVES,
+      out: false,
+      hand: [],
+      takenUp: [],
+      gambles: 0,
+    })),
     deck: [],
     poolUp: [],
     poolDown: [],
@@ -103,7 +114,11 @@ export function createGame(seats: readonly GameSeat[], rng: Rng = Math.random): 
 export function startRound(state: GameState, rng: Rng = Math.random): void {
   if (state.phase !== "roundEnd") throw new GameError("The round is still running.");
   const deck = shuffle(buildDeck(), rng);
-  for (const p of state.players) p.hand = p.out ? [] : deck.splice(0, HAND_SIZE);
+  for (const p of state.players) {
+    p.hand = p.out ? [] : deck.splice(0, HAND_SIZE);
+    p.takenUp = [];
+    p.gambles = 0;
+  }
   state.poolUp = deck.splice(0, HAND_SIZE);
   state.poolDown = deck.splice(0, HAND_SIZE);
   state.deck = deck;
@@ -158,6 +173,7 @@ export function applyAction(state: GameState, seat: number, action: GameAction):
       const pool = poolCards(state, action.pool);
       const { handIdx, poolIdx } = action;
       if (!isCardIndex(handIdx) || !isCardIndex(poolIdx)) throw new GameError("Invalid card.");
+      noteTaken(player, action.pool, [pool[poolIdx]!]);
       [player.hand[handIdx], pool[poolIdx]] = [pool[poolIdx]!, player.hand[handIdx]!];
       emit(state, { type: "swap", seat, pool: action.pool, handIdx, poolIdx });
       break;
@@ -165,6 +181,7 @@ export function applyAction(state: GameState, seat: number, action: GameAction):
     case "SWAP_ALL": {
       const pool = poolCards(state, action.pool);
       const taken = pool.splice(0, HAND_SIZE, ...player.hand);
+      noteTaken(player, action.pool, taken);
       player.hand = taken;
       emit(state, { type: "swapAll", seat, pool: action.pool });
       break;
@@ -204,10 +221,14 @@ export function viewFor(state: GameState, seat: number): GameView {
   const opening = state.phase === "schieben";
   return {
     you: seat,
-    players: state.players.map(({ hand, ...p }, i) => {
+    players: state.players.map(({ hand, takenUp, ...p }, i) => {
       // While someone else decides keep/push, your own cards are still face-down.
       const visible = showdown || (i === seat && !(opening && seat !== state.turnIdx));
-      return { ...p, hand: hand.map((c) => (visible ? { ...c } : null)) };
+      return {
+        ...p,
+        hand: hand.map((c) => (visible ? { ...c } : null)),
+        takenUp: takenUp.map((move) => move.map((c) => ({ ...c }))),
+      };
     }),
     poolUp: state.poolUp.map((c) => (opening ? null : { ...c })),
     poolDown: state.poolDown.map(() => null),
@@ -235,6 +256,11 @@ export function convertToBot(state: GameState, id: string, level: BotLevel): voi
     player.isBot = true;
     player.botLevel = level;
   }
+}
+
+function noteTaken(player: GamePlayer, pool: PoolName, cards: readonly Card[]): void {
+  if (pool === "up") player.takenUp.push(cards.map((c) => ({ ...c })));
+  else player.gambles++;
 }
 
 function emit(state: GameState, event: GameEvent): void {

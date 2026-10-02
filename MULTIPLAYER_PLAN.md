@@ -255,7 +255,7 @@ full state exists only on the server.
 | 1 — Scaffold + debug APK | ✅ Done | Debug APK verified on a real phone over LAN (see `docs/RUNNING.md`) |
 | 2 — Rooms & lobby | ✅ Done | Fixed seats, host controls (seat count, add/remove bot, per-bot difficulty, kick), ready/start, back to lobby |
 | 3 — Core gameplay | ✅ Done | Server-driven deal → schieben → play → knock → showdown → next round; personalized `game:state`; resume token (reload/reconnect keeps your seat); seats arranged around the table rim. Bots use a placeholder greedy AI. Rules: max 8 players; lay-down costs the lowest other hand a life; full showdown tie = no loss |
-| 4 — Bots | ⬜ Not started | Port easy/normal/hard AIs; auto-bot on long disconnect |
+| 4 — Bots | ✅ Done | easy = greedy face-up only; normal = prototype AI (knock 24+, swap, else ≤2 blind gambles); hard = Monte-Carlo lookahead (100 sampled deals, opponents keep face-up cards they took) — ~62% vs normal heads-up, ~3 ms/move. Blind push decided on expected value (face-up set is hidden in the opening). Think delay 600–1400 ms. A disconnected human's turn is played by a normal stand-in after 15 s; the seat stays theirs. Prototype's suit-threat "hard" lost to normal in simulation, so it was replaced |
 | 5 — N players + lives | ⬜ Not started | |
 | 6 — Native plugins & polish | ⬜ Not started | |
 | 7 — Mobile resilience | ⬜ Not started | |

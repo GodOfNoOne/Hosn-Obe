@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { RoomError, RoomManager } from "../src/rooms.js";
+import { AWAY_TURN_MS, RoomError, RoomManager } from "../src/rooms.js";
 
 function ok<T extends { ok: boolean }>(r: T): Extract<T, { ok: true }> {
   if (!r.ok) throw new Error(JSON.stringify(r));
@@ -268,5 +268,37 @@ describe("RoomManager gameplay", () => {
     expect(game.phase).toBe("roundEnd");
     vi.runOnlyPendingTimers();
     expect(game).toMatchObject({ phase: "schieben", round: 2, startingIdx: 1 });
+  });
+
+  it("plays a disconnected human's turn with a stand-in after a delay, until they resume", () => {
+    vi.useFakeTimers();
+    const { rooms, code, bob, game } = started();
+    const onStep = vi.fn((c: string) => rooms.schedule(c, onStep));
+    const card = (suit: "♠" | "♥" | "♦" | "♣", val: 7 | 8 | 9) => ({
+      suit,
+      rank: String(val) as "7" | "8" | "9",
+      val,
+      red: suit === "♥" || suit === "♦",
+    });
+    // Low fixed cards so nobody can reach 31 and end the round early.
+    game().players[0]!.hand = [card("♠", 7), card("♥", 7), card("♦", 8)];
+    game().players[1]!.hand = [card("♣", 7), card("♣", 8), card("♥", 9)];
+    game().poolUp = [card("♦", 7), card("♥", 8), card("♠", 9)];
+    rooms.gameAction("s-host", { type: "KEEP" });
+    rooms.disconnect("s-bob");
+    rooms.schedule(code, onStep);
+    const seq = game().seq;
+    vi.advanceTimersByTime(AWAY_TURN_MS - 1);
+    expect(game().seq).toBe(seq);
+    vi.advanceTimersByTime(1);
+    expect(game().seq).toBe(seq + 1);
+    expect(game().players[1]!.isBot).toBe(false);
+
+    // Back online before their next turn: no stand-in.
+    rooms.resume("s-bob2", bob.token);
+    rooms.gameAction("s-host", { type: "KNOCK" });
+    rooms.schedule(code, onStep);
+    vi.advanceTimersByTime(AWAY_TURN_MS * 2);
+    expect(game()).toMatchObject({ phase: "play", turnIdx: 1, seq: seq + 2 });
   });
 });

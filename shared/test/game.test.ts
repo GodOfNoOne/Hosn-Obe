@@ -10,6 +10,7 @@ import {
   viewFor,
   type GameState,
 } from "../src/game.js";
+import { BOT_LEVELS, type BotLevel } from "../src/net.js";
 import type { Card } from "../src/types.js";
 
 const DECK = buildDeck();
@@ -133,6 +134,22 @@ describe("applyAction", () => {
     expect(g.poolUp).toEqual(prev);
   });
 
+  it("publicly tracks face-up cards taken and face-down gambles, reset each round", () => {
+    const g = inPlay();
+    const taken = g.poolUp[0]!;
+    applyAction(g, 1, { type: "SWAP", pool: "up", handIdx: 0, poolIdx: 0 });
+    applyAction(g, 0, { type: "SWAP", pool: "down", handIdx: 0, poolIdx: 0 });
+    expect(g.players[1]!.takenUp).toEqual([[taken]]);
+    expect(g.players[0]!).toMatchObject({ takenUp: [], gambles: 1 });
+    expect(viewFor(g, 0).players[1]!.takenUp).toEqual([[taken]]);
+    g.phase = "roundEnd";
+    startRound(g);
+    expect(g.players.map((p) => [p.takenUp, p.gambles])).toEqual([
+      [[], 0],
+      [[], 0],
+    ]);
+  });
+
   it("after a knock everyone else gets one turn, then the lowest hand loses a life", () => {
     const g = inPlay(3);
     g.players[0]!.hand = hand("A♠", "K♠", "7♥");
@@ -181,22 +198,105 @@ describe("applyAction", () => {
 });
 
 describe("chooseBotAction", () => {
-  it("keeps a decent opening hand and pushes a weak one", () => {
+  it("keeps a decent opening hand and pushes a weak one; easy pushes more eagerly", () => {
     const g = game();
     g.players[0]!.hand = hand("A♠", "K♠", "7♥");
     expect(chooseBotAction(viewFor(g, 0))).toEqual({ type: "KEEP" });
     g.players[0]!.hand = hand("7♠", "8♥", "9♦");
     expect(chooseBotAction(viewFor(g, 0))).toEqual({ type: "PUSH" });
+    g.players[0]!.hand = hand("7♠", "9♠", "8♦");
+    expect(chooseBotAction(viewFor(g, 0), "normal")).toEqual({ type: "KEEP" });
+    expect(chooseBotAction(viewFor(g, 0), "easy")).toEqual({ type: "PUSH" });
   });
 
-  it("lays down a winner, takes the best face-up swap, else knocks", () => {
+  it("lays down a winner at every level", () => {
     const g = inPlay();
     g.players[1]!.hand = hand("A♠", "K♠", "Q♠");
-    expect(chooseBotAction(viewFor(g, 1))).toEqual({ type: "LAY_DOWN" });
+    for (const level of BOT_LEVELS) {
+      expect(chooseBotAction(viewFor(g, 1), level)).toEqual({ type: "LAY_DOWN" });
+    }
+  });
+
+  it("easy takes the best face-up swap, else knocks", () => {
+    const g = inPlay();
     g.players[1]!.hand = hand("A♠", "K♠", "7♥");
     g.poolUp = hand("8♦", "Q♠", "9♣");
-    expect(chooseBotAction(viewFor(g, 1))).toEqual({ type: "SWAP", pool: "up", handIdx: 2, poolIdx: 1 });
+    expect(chooseBotAction(viewFor(g, 1), "easy")).toEqual({ type: "SWAP", pool: "up", handIdx: 2, poolIdx: 1 });
     g.poolUp = hand("8♦", "7♣", "9♣");
+    expect(chooseBotAction(viewFor(g, 1), "easy")).toEqual({ type: "KNOCK" });
+  });
+
+  it("normal knocks on 24+, otherwise swaps, else gambles face-down (twice per round at most)", () => {
+    const g = inPlay();
+    g.poolUp = hand("8♦", "Q♠", "9♣");
+    g.players[1]!.hand = hand("7♠", "8♠", "9♠");
+    expect(chooseBotAction(viewFor(g, 1))).toEqual({ type: "KNOCK" });
+
+    g.players[1]!.hand = hand("A♥", "K♥", "7♦");
+    g.poolUp = hand("8♣", "7♠", "9♦");
+    expect(chooseBotAction(viewFor(g, 1), "normal", () => 0.5)).toEqual({
+      type: "SWAP",
+      pool: "down",
+      handIdx: 2,
+      poolIdx: 1,
+    });
+    g.players[1]!.gambles = 2;
     expect(chooseBotAction(viewFor(g, 1))).toEqual({ type: "KNOCK" });
   });
+
+  it("only swaps or stands on the last move after a knock", () => {
+    const g = inPlay();
+    g.knockerIdx = 0;
+    g.players[1]!.hand = hand("A♥", "K♥", "7♣");
+    g.poolUp = hand("8♠", "7♠", "9♦");
+    expect(chooseBotAction(viewFor(g, 1))).toEqual({ type: "KNOCK" });
+  });
+
+  it("hard looks ahead: it grabs a 31 and won't stand on a hand that is sure to lose", () => {
+    const g = inPlay();
+    g.players[1]!.hand = hand("A♠", "K♠", "7♥");
+    g.poolUp = hand("8♦", "Q♠", "9♣");
+    expect(chooseBotAction(viewFor(g, 1), "hard", seeded(1))).toEqual({
+      type: "SWAP",
+      pool: "up",
+      handIdx: 2,
+      poolIdx: 1,
+    });
+
+    // Last move against a known 30: standing on 21 always loses, so it must try something.
+    g.knockerIdx = 0;
+    g.players[0]!.takenUp = [hand("K♦", "Q♦", "J♦")];
+    g.players[1]!.hand = hand("A♣", "K♣", "7♥");
+    g.poolUp = hand("8♠", "7♠", "9♥");
+    expect(chooseBotAction(viewFor(g, 1), "hard", seeded(2)).type).not.toBe("KNOCK");
+  });
+
+  it("finishes whole games for every level mix using only seat views", () => {
+    const rng = seeded(7);
+    for (const levels of [
+      ["easy", "normal"],
+      ["hard", "easy", "normal"],
+    ] as BotLevel[][]) {
+      const g = createGame(
+        levels.map((botLevel, i) => ({ id: `b${i}`, name: botLevel, isBot: true, botLevel })),
+        rng,
+      );
+      for (let steps = 0; g.phase !== "gameEnd"; steps++) {
+        if (steps > 5000) throw new Error("game did not finish");
+        if (g.phase === "roundEnd") startRound(g, rng);
+        else applyAction(g, g.turnIdx, chooseBotAction(viewFor(g, g.turnIdx), levels[g.turnIdx], rng));
+      }
+    }
+  });
 });
+
+/** Small deterministic PRNG (mulberry32) for repeatable bot tests. */
+function seeded(seed: number): () => number {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}

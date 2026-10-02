@@ -31,8 +31,12 @@ import {
 /** A rejected room operation; the message is safe to show to the user. */
 export class RoomError extends Error {}
 
-export const BOT_THINK_MS = 1200;
+export const BOT_THINK_MS = { min: 600, max: 1400 };
 export const NEXT_ROUND_MS = 5000;
+/** A disconnected human's turn is played by a stand-in bot after this long. */
+export const AWAY_TURN_MS = 15_000;
+/** Skill of the stand-in for disconnected or departed humans. */
+const STAND_IN_LEVEL: BotLevel = "normal";
 
 interface Member {
   /** Secret that lets a new connection reclaim this seat. */
@@ -296,7 +300,8 @@ export class RoomManager {
 
   /**
    * Arm the room's single timer for whatever happens next without a human:
-   * a bot's move or the next round. `onStep` runs after each automatic step.
+   * a bot's move, a stand-in move for a disconnected human, or the next round.
+   * `onStep` runs after each automatic step.
    */
   schedule(code: string, onStep: (code: string) => void): void {
     const room = this.rooms.get(code);
@@ -305,20 +310,22 @@ export class RoomManager {
     const game = room.game;
     if (!game) return;
 
+    const current = game.players[game.turnIdx]!;
+    const away = room.seats.find((p) => p?.id === current.id)?.connected === false;
     let delay: number;
     let step: () => void;
     if (game.phase === "roundEnd") {
       delay = NEXT_ROUND_MS;
       step = () => startRound(game);
-    } else if (
-      (game.phase === "schieben" || game.phase === "play") &&
-      game.players[game.turnIdx]!.isBot
-    ) {
-      delay = BOT_THINK_MS;
+    } else if ((game.phase === "schieben" || game.phase === "play") && (current.isBot || away)) {
+      const level = (current.isBot && current.botLevel) || STAND_IN_LEVEL;
+      delay = current.isBot
+        ? BOT_THINK_MS.min + Math.random() * (BOT_THINK_MS.max - BOT_THINK_MS.min)
+        : AWAY_TURN_MS;
       step = () => {
         const seat = game.turnIdx;
         try {
-          applyAction(game, seat, chooseBotAction(viewFor(game, seat)));
+          applyAction(game, seat, chooseBotAction(viewFor(game, seat), level));
         } catch (err) {
           console.error("Bot move failed; falling back.", err);
           applyAction(game, seat, { type: game.phase === "schieben" ? "KEEP" : "KNOCK" });
@@ -400,7 +407,7 @@ export class RoomManager {
     const idx = room.seats.findIndex((p) => p?.id === playerId);
     const player = room.seats[idx];
     if (player && room.game) {
-      const level: BotLevel = "normal";
+      const level = STAND_IN_LEVEL;
       Object.assign(player, { isBot: true, botLevel: level, isHost: false, ready: true, connected: true });
       convertToBot(room.game, playerId, level);
     } else if (idx !== -1) {
