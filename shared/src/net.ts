@@ -1,10 +1,10 @@
 /**
- * Network contracts shared between the server and client.
- *
- * Covers the room/lobby surface: create/join by code, seats, host controls,
- * bots, ready/start. Gameplay events (deal, schieben, knock, …) are layered on
- * in later phases.
+ * Network contracts shared between the server and client: rooms (create/join
+ * by code, seats, host controls, bots, ready/start, resume) and gameplay
+ * (`game:action` in, personalized `game:state` out).
  */
+
+import type { GameAction, GameView } from "./game.js";
 
 export type BotLevel = "easy" | "normal" | "hard";
 export const BOT_LEVELS: readonly BotLevel[] = ["easy", "normal", "hard"];
@@ -34,15 +34,17 @@ export interface RoomState {
   phase: RoomPhase;
 }
 
-/** Result of a create/join request, returned via a socket acknowledgement. */
+/** Result of a create/join/resume request, returned via a socket acknowledgement. */
 export type RoomActionResult =
-  | { ok: true; code: string; youId: string }
+  /** `token` is a secret for `room:resume`; keep it out of logs and other players' view. */
+  | { ok: true; code: string; youId: string; token: string }
   | { ok: false; error: string };
 
 /** Constraints validated on the server (and mirrored in client UI). */
 export const ROOM_LIMITS = {
   minPlayers: 2,
-  maxPlayers: 9,
+  // 32 cards: 3 per player plus the two 3-card table pools.
+  maxPlayers: 8,
   codeLength: 5,
   nameMaxLength: 20,
 } as const;
@@ -73,6 +75,11 @@ export interface ClientToServerEvents {
     ack: (result: RoomActionResult) => void,
   ) => void;
   "room:leave": () => void;
+  /** Rebind this connection to the seat a previous connection held. */
+  "room:resume": (
+    payload: { token: string },
+    ack: (result: RoomActionResult) => void,
+  ) => void;
   "room:setReady": (payload: { ready: boolean }) => void;
   // Host-only below; the server rejects them from anyone else.
   "room:setMaxPlayers": (payload: { maxPlayers: number }) => void;
@@ -82,6 +89,7 @@ export interface ClientToServerEvents {
   "room:kick": (payload: { seatIdx: number }) => void;
   "room:start": () => void;
   "room:returnToLobby": () => void;
+  "game:action": (action: GameAction) => void;
 }
 
 /** Events the server pushes to clients. */
@@ -89,4 +97,6 @@ export interface ServerToClientEvents {
   "room:state": (room: RoomState) => void;
   "room:closed": (payload: { reason: string }) => void;
   "room:error": (payload: { message: string }) => void;
+  /** Personalized per seat: never contains cards that seat may not see. */
+  "game:state": (view: GameView) => void;
 }

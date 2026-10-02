@@ -10,7 +10,7 @@ export function Lobby({
   onJoined,
   notice,
 }: {
-  onJoined: (youId: string) => void;
+  onJoined: (youId: string, token: string) => void;
   notice: string | null;
 }) {
   const [name, setName] = useState("");
@@ -22,7 +22,7 @@ export function Lobby({
     setBusy(false);
     if (result.ok) {
       setError(null);
-      onJoined(result.youId);
+      onJoined(result.youId, result.token);
     } else {
       setError(result.error);
     }

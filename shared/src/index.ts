@@ -9,3 +9,5 @@ export * from "./types.js";
 export * from "./deck.js";
 export * from "./scoring.js";
 export * from "./net.js";
+export * from "./game.js";
+export * from "./bot.js";

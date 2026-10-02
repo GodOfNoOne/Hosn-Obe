@@ -1,5 +1,3 @@
-import { useEffect, useState } from "react";
-
 import {
   BOT_LEVELS,
   ROOM_LIMITS,
@@ -11,6 +9,7 @@ import {
 } from "@hosn-obe/shared";
 
 import { socket } from "./socket.js";
+import { useServerError } from "./useServerError.js";
 
 const SEAT_COUNTS = Array.from(
   { length: ROOM_LIMITS.maxPlayers - ROOM_LIMITS.minPlayers + 1 },
@@ -27,21 +26,7 @@ export function Room({
   youId: string | null;
   onLeave: () => void;
 }) {
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    function onError({ message }: { message: string }) {
-      setError(message);
-      clearTimeout(timer);
-      timer = setTimeout(() => setError(null), 4000);
-    }
-    socket.on("room:error", onError);
-    return () => {
-      socket.off("room:error", onError);
-      clearTimeout(timer);
-    };
-  }, []);
+  const error = useServerError();
 
   const isHost = room.hostId === youId;
   const inLobby = room.phase === "lobby";
@@ -79,7 +64,7 @@ export function Room({
       </div>
 
       {!inLobby && (
-        <p className="notice">Game in progress — the table arrives in the next phase.</p>
+        <p className="notice">Loading the table…</p>
       )}
 
       <ul className="players">
@@ -168,6 +153,7 @@ function SeatRow({
       <span className="player-name">{player.name}</span>
       <span className="badges">
         {isYou && <span className="badge badge--you">you</span>}
+        {!player.connected && <span className="badge badge--offline">offline</span>}
         {player.isHost && <span className="badge badge--host">host</span>}
         {player.isBot &&
           (canEdit ? (

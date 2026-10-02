@@ -251,11 +251,11 @@ full state exists only on the server.
 
 | Phase | Status | Notes |
 | --- | --- | --- |
-| 0 — Extract logic | 🟡 Partial | Deck/shuffle/scoring in `shared/` with tests; `applyAction` reducer lands with Phase 3 |
+| 0 — Extract logic | ✅ Done | Deck/shuffle/scoring + `applyAction` engine and `viewFor` in `shared/` with tests |
 | 1 — Scaffold + debug APK | ✅ Done | Debug APK verified on a real phone over LAN (see `docs/RUNNING.md`) |
 | 2 — Rooms & lobby | ✅ Done | Fixed seats, host controls (seat count, add/remove bot, per-bot difficulty, kick), ready/start, back to lobby |
-| 3 — Core gameplay (2 humans) | 🔵 In progress | |
-| 4 — Bots | ⬜ Not started | |
+| 3 — Core gameplay | ✅ Done | Server-driven deal → schieben → play → knock → showdown → next round; personalized `game:state`; resume token (reload/reconnect keeps your seat); seats arranged around the table rim. Bots use a placeholder greedy AI. Rules: max 8 players; lay-down costs the lowest other hand a life; full showdown tie = no loss |
+| 4 — Bots | ⬜ Not started | Port easy/normal/hard AIs; auto-bot on long disconnect |
 | 5 — N players + lives | ⬜ Not started | |
 | 6 — Native plugins & polish | ⬜ Not started | |
 | 7 — Mobile resilience | ⬜ Not started | |
