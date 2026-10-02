@@ -88,6 +88,12 @@ function humans(room: ServerRoom): RoomPlayer[] {
   return seatedPlayers(room).filter((p) => !p.isBot);
 }
 
+/** Lobby seats behave like a stack: occupied seats first (in order), empty seats last. */
+function compactSeats(room: ServerRoom): void {
+  const seated = seatedPlayers(room);
+  room.seats = [...seated, ...Array<null>(room.maxPlayers - seated.length).fill(null)];
+}
+
 export class RoomManager {
   private readonly rooms = new Map<string, ServerRoom>();
   private readonly sockets = new Map<string, Session>();
@@ -205,13 +211,8 @@ export class RoomManager {
     if (seatedPlayers(room).length > size) {
       throw new RoomError("Remove players before shrinking the table.");
     }
-    // Players in cut-off seats move into the first free seats that remain.
-    const overflow = seatedPlayers({ seats: room.seats.slice(size) });
-    const seats = room.seats.slice(0, size);
-    while (seats.length < size) seats.push(null);
-    for (const p of overflow) seats[seats.indexOf(null)] = p;
-    room.seats = seats;
     room.maxPlayers = size;
+    compactSeats(room);
     return room;
   }
 
@@ -228,6 +229,7 @@ export class RoomManager {
       ready: true,
       connected: true,
     };
+    compactSeats(room);
     return room;
   }
 
@@ -236,6 +238,7 @@ export class RoomManager {
     const idx = seatIndex(room, rawSeat);
     if (!room.seats[idx]?.isBot) throw new RoomError("That seat has no bot.");
     room.seats[idx] = null;
+    compactSeats(room);
     return room;
   }
 
@@ -402,6 +405,7 @@ export class RoomManager {
       convertToBot(room.game, playerId, level);
     } else if (idx !== -1) {
       room.seats[idx] = null;
+      compactSeats(room);
     }
 
     const remaining = humans(room);

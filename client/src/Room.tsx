@@ -32,6 +32,7 @@ export function Room({
   const inLobby = room.phase === "lobby";
   const me = room.seats.find((p) => p?.id === youId) ?? null;
   const blocker = startBlocker(room);
+  const nextFree = room.seats.indexOf(null);
 
   return (
     <div className="panel">
@@ -83,7 +84,7 @@ export function Room({
           ) : (
             <li key={`empty-${seatIdx}`} className="player player--empty">
               <span className="player-name">Empty seat</span>
-              {isHost && inLobby && (
+              {isHost && inLobby && seatIdx === nextFree && (
                 <button
                   className="btn-small"
                   onClick={() => socket.emit("room:addBot", { seatIdx, level: "normal" })}

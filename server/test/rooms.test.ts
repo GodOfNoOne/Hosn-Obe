@@ -59,7 +59,25 @@ describe("RoomManager lobby", () => {
     expect(() => rooms.addBot("s-host", 9, "easy")).toThrow("Invalid seat");
     expect(() => rooms.removeBot("s-host", 0)).toThrow(RoomError);
     rooms.removeBot("s-host", 1);
-    expect(room().seats[1]).toBeNull();
+    expect(room().seats[1]).toMatchObject({ name: "Bot 2" });
+    expect(room().seats[2]).toBeNull();
+  });
+
+  it("keeps seats stacked: removals close gaps and new seats fill the next free slot", () => {
+    const { rooms, code, room } = setup(5);
+    rooms.addBot("s-host", 1, "easy");
+    rooms.addBot("s-host", 2, "easy");
+    rooms.joinRoom("s-bob", code, "Bob");
+    rooms.addBot("s-host", 4, "easy");
+    const names = () => room().seats.map((p) => p?.name ?? null);
+    expect(names()).toEqual(["Alice", "Bot 1", "Bot 2", "Bob", "Bot 3"]);
+
+    rooms.removeBot("s-host", 2);
+    expect(names()).toEqual(["Alice", "Bot 1", "Bob", "Bot 3", null]);
+    rooms.kick("s-host", 2);
+    expect(names()).toEqual(["Alice", "Bot 1", "Bot 3", null, null]);
+    rooms.addBot("s-host", 4, "easy");
+    expect(names()).toEqual(["Alice", "Bot 1", "Bot 3", "Bot 2", null]);
   });
 
   it("changes an individual bot's level", () => {
@@ -98,7 +116,8 @@ describe("RoomManager lobby", () => {
     expect(() => rooms.kick("s-host", 0)).toThrow(RoomError);
     expect(() => rooms.kick("s-host", 2)).toThrow(RoomError);
     expect(rooms.kick("s-host", 1).kickedSocketId).toBe("s-bob");
-    expect(room().seats[1]).toBeNull();
+    expect(room().seats[1]).toMatchObject({ isBot: true });
+    expect(room().seats[2]).toBeNull();
     expect(() => rooms.setReady("s-bob", true)).toThrow("not in a room");
   });
 
@@ -108,7 +127,7 @@ describe("RoomManager lobby", () => {
     const bob = ok(rooms.joinRoom("s-bob", code, "Bob"));
     rooms.leaveRoom("s-host");
     expect(room().hostId).toBe(bob.youId);
-    expect(room().seats[2]).toMatchObject({ isHost: true, ready: true });
+    expect(room().seats[1]).toMatchObject({ name: "Bob", isHost: true, ready: true });
     rooms.leaveRoom("s-bob");
     expect(rooms.getRoom(code)).toBeNull();
   });
