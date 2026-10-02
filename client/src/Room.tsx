@@ -1,6 +1,23 @@
-import type { RoomState } from "@hosn-obe/shared";
+import { useEffect, useState } from "react";
 
-/** Lobby view once seated: room code and the live list of players. */
+import {
+  BOT_LEVELS,
+  ROOM_LIMITS,
+  seatedPlayers,
+  startBlocker,
+  type BotLevel,
+  type RoomPlayer,
+  type RoomState,
+} from "@hosn-obe/shared";
+
+import { socket } from "./socket.js";
+
+const SEAT_COUNTS = Array.from(
+  { length: ROOM_LIMITS.maxPlayers - ROOM_LIMITS.minPlayers + 1 },
+  (_, i) => ROOM_LIMITS.minPlayers + i,
+);
+
+/** Seated view: seats, ready state and (for the host) table controls. */
 export function Room({
   room,
   youId,
@@ -10,6 +27,27 @@ export function Room({
   youId: string | null;
   onLeave: () => void;
 }) {
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    function onError({ message }: { message: string }) {
+      setError(message);
+      clearTimeout(timer);
+      timer = setTimeout(() => setError(null), 4000);
+    }
+    socket.on("room:error", onError);
+    return () => {
+      socket.off("room:error", onError);
+      clearTimeout(timer);
+    };
+  }, []);
+
+  const isHost = room.hostId === youId;
+  const inLobby = room.phase === "lobby";
+  const me = room.seats.find((p) => p?.id === youId) ?? null;
+  const blocker = startBlocker(room);
+
   return (
     <div className="panel">
       <div className="room-header">
@@ -17,29 +55,148 @@ export function Room({
           <span className="label">Room code</span>
           <span className="code">{room.code}</span>
         </div>
-        <span className="seats">
-          {room.players.length}/{room.maxPlayers}
-        </span>
+        {isHost && inLobby ? (
+          <label className="inline-field">
+            <span>Seats</span>
+            <select
+              value={room.maxPlayers}
+              onChange={(e) =>
+                socket.emit("room:setMaxPlayers", { maxPlayers: Number(e.target.value) })
+              }
+            >
+              {SEAT_COUNTS.map((n) => (
+                <option key={n} value={n} disabled={n < seatedPlayers(room).length}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <span className="seats">
+            {seatedPlayers(room).length}/{room.maxPlayers}
+          </span>
+        )}
       </div>
 
+      {!inLobby && (
+        <p className="notice">Game in progress — the table arrives in the next phase.</p>
+      )}
+
       <ul className="players">
-        {room.players.map((p) => (
-          <li key={p.id} className="player">
-            <span className="player-name">{p.name}</span>
-            <span className="badges">
-              {p.id === youId && <span className="badge badge--you">you</span>}
-              {p.isHost && <span className="badge badge--host">host</span>}
-              {p.isBot && <span className="badge badge--bot">bot</span>}
-            </span>
-          </li>
-        ))}
+        {room.seats.map((p, seatIdx) =>
+          p ? (
+            <SeatRow
+              key={p.id}
+              player={p}
+              isYou={p.id === youId}
+              canEdit={isHost && inLobby && !p.isHost}
+              onRemove={() =>
+                socket.emit(p.isBot ? "room:removeBot" : "room:kick", { seatIdx })
+              }
+              onLevel={(level) => socket.emit("room:setBotLevel", { seatIdx, level })}
+            />
+          ) : (
+            <li key={`empty-${seatIdx}`} className="player player--empty">
+              <span className="player-name">Empty seat</span>
+              {isHost && inLobby && (
+                <button
+                  className="btn-small"
+                  onClick={() => socket.emit("room:addBot", { seatIdx, level: "normal" })}
+                >
+                  + Bot
+                </button>
+              )}
+            </li>
+          ),
+        )}
       </ul>
 
-      <div className="row">
+      {inLobby && isHost && (
+        <>
+          <div className="row">
+            <button disabled={blocker !== null} onClick={() => socket.emit("room:start")}>
+              Start game
+            </button>
+          </div>
+          {blocker && <p className="hint">{blocker}</p>}
+        </>
+      )}
+
+      {inLobby && !isHost && me && (
+        <div className="row">
+          <button
+            className={me.ready ? "secondary" : undefined}
+            onClick={() => socket.emit("room:setReady", { ready: !me.ready })}
+          >
+            {me.ready ? "Not ready" : "Ready"}
+          </button>
+        </div>
+      )}
+
+      {!inLobby && isHost && (
+        <div className="row">
+          <button onClick={() => socket.emit("room:returnToLobby")}>Back to lobby</button>
+        </div>
+      )}
+
+      {error && <p className="error">{error}</p>}
+
+      <div className="row row--spaced">
         <button className="secondary" onClick={onLeave}>
           Leave room
         </button>
       </div>
     </div>
+  );
+}
+
+function SeatRow({
+  player,
+  isYou,
+  canEdit,
+  onRemove,
+  onLevel,
+}: {
+  player: RoomPlayer;
+  isYou: boolean;
+  canEdit: boolean;
+  onRemove: () => void;
+  onLevel: (level: BotLevel) => void;
+}) {
+  return (
+    <li className="player">
+      <span className="player-name">{player.name}</span>
+      <span className="badges">
+        {isYou && <span className="badge badge--you">you</span>}
+        {player.isHost && <span className="badge badge--host">host</span>}
+        {player.isBot &&
+          (canEdit ? (
+            <select
+              className="bot-level"
+              aria-label={`${player.name} difficulty`}
+              value={player.botLevel}
+              onChange={(e) => onLevel(e.target.value as BotLevel)}
+            >
+              {BOT_LEVELS.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="badge badge--bot">bot · {player.botLevel}</span>
+          ))}
+        {!player.isHost && !player.isBot && (
+          <span className={`badge ${player.ready ? "badge--ready" : "badge--waiting"}`}>
+            {player.ready ? "ready" : "not ready"}
+          </span>
+        )}
+        {canEdit && (
+          <button className="btn-icon" aria-label={`Remove ${player.name}`} onClick={onRemove}>
+            ✕
+          </button>
+        )}
+      </span>
+    </li>
   );
 }

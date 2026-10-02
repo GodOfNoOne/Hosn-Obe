@@ -247,6 +247,20 @@ full state exists only on the server.
 
 ## 9. Build Phases (milestones)
 
+### Progress
+
+| Phase | Status | Notes |
+| --- | --- | --- |
+| 0 — Extract logic | 🟡 Partial | Deck/shuffle/scoring in `shared/` with tests; `applyAction` reducer lands with Phase 3 |
+| 1 — Scaffold + debug APK | ✅ Done | Debug APK verified on a real phone over LAN (see `docs/RUNNING.md`) |
+| 2 — Rooms & lobby | ✅ Done | Fixed seats, host controls (seat count, add/remove bot, per-bot difficulty, kick), ready/start, back to lobby |
+| 3 — Core gameplay (2 humans) | 🔵 In progress | |
+| 4 — Bots | ⬜ Not started | |
+| 5 — N players + lives | ⬜ Not started | |
+| 6 — Native plugins & polish | ⬜ Not started | |
+| 7 — Mobile resilience | ⬜ Not started | |
+| 8 — Release & deploy | ⬜ Not started | |
+
 ### Phase 0 — Extract logic (no UI change)
 
 - Move `handScore`, `isInstantWin`, `buildDeck`, `shuffle`, deal logic into

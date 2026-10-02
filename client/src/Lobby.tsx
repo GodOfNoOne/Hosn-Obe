@@ -6,7 +6,13 @@ import { socket } from "./socket.js";
 
 /** Create or join a room. On success the parent receives your player id; the
  * room contents arrive via the broadcast `room:state` event. */
-export function Lobby({ onJoined }: { onJoined: (youId: string) => void }) {
+export function Lobby({
+  onJoined,
+  notice,
+}: {
+  onJoined: (youId: string) => void;
+  notice: string | null;
+}) {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +42,7 @@ export function Lobby({ onJoined }: { onJoined: (youId: string) => void }) {
 
   return (
     <div className="panel">
+      {notice && <p className="notice">{notice}</p>}
       <label className="field">
         <span>Your name</span>
         <input

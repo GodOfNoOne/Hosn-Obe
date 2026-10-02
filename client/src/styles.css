@@ -151,6 +151,7 @@ button.secondary {
 }
 .badges {
   display: flex;
+  align-items: center;
   gap: 6px;
 }
 .badge {
@@ -169,4 +170,71 @@ button.secondary {
 .badge--bot {
   background: rgba(120, 140, 255, 0.2);
   color: #8ca0ff;
+}
+.badge--ready {
+  background: rgba(76, 175, 125, 0.2);
+  color: var(--accent);
+}
+.badge--waiting {
+  background: rgba(154, 160, 180, 0.15);
+  color: var(--muted);
+}
+
+.player--empty {
+  background: transparent;
+  border: 1px dashed #2b3153;
+  color: var(--muted);
+}
+
+button.btn-small {
+  flex: none;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+button.btn-icon {
+  flex: none;
+  padding: 0 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.inline-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+select.bot-level {
+  padding: 2px 6px;
+  font-size: 0.75rem;
+  border-color: rgba(120, 140, 255, 0.4);
+  color: #8ca0ff;
+}
+select {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #2b3153;
+  background: #10142a;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.notice {
+  background: rgba(255, 200, 80, 0.12);
+  color: #ffc850;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 0 0 14px;
+  font-size: 0.9rem;
+}
+.hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-align: center;
+  margin: 8px 0 0;
+}
+.row--spaced {
+  margin-top: 12px;
 }

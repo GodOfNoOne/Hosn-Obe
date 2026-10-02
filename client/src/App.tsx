@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { RoomState } from "@hosn-obe/shared";
 
@@ -10,6 +10,9 @@ export function App() {
   const [connected, setConnected] = useState(socket.connected);
   const [room, setRoom] = useState<RoomState | null>(null);
   const [youId, setYouId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const roomRef = useRef(room);
+  roomRef.current = room;
 
   useEffect(() => {
     function onConnect() {
@@ -18,11 +21,16 @@ export function App() {
     }
     function onDisconnect() {
       setConnected(false);
+      // The server drops your seat on disconnect (until reconnection tokens land).
+      if (roomRef.current) setNotice("Connection lost — you left the room.");
+      setRoom(null);
     }
     function onRoomState(next: RoomState) {
+      setNotice(null);
       setRoom(next);
     }
-    function onRoomClosed() {
+    function onRoomClosed({ reason }: { reason: string }) {
+      setNotice(reason);
       setRoom(null);
     }
 
@@ -55,7 +63,7 @@ export function App() {
       {room ? (
         <Room room={room} youId={youId} onLeave={handleLeave} />
       ) : (
-        <Lobby onJoined={setYouId} />
+        <Lobby onJoined={setYouId} notice={notice} />
       )}
     </div>
   );
