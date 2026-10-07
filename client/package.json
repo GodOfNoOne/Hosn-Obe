@@ -12,6 +12,9 @@
     "cap:sync": "cap sync android"
   },
   "dependencies": {
+    "@capacitor-community/keep-awake": "^8.0.1",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/haptics": "^8.0.2",
     "@hosn-obe/shared": "*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

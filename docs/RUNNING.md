@@ -113,8 +113,9 @@ Edit `client/.env` (this file is git-ignored, so your IP stays local):
 VITE_SERVER_URL=http://10.100.102.74:3000
 ```
 
-> The APK bakes this URL in **at build time** — change it and you must rebuild
-> (section 4.3). Inside an **emulator** the host PC is `http://10.0.2.2:3000`
+> The APK bakes this URL in **at build time** as the default. To point an
+> installed APK at a different server without rebuilding, open **Settings →
+> Server address** on the phone. Inside an **emulator** the host PC is `http://10.0.2.2:3000`
 > instead; on a **real phone** use the PC's LAN IP.
 
 ### 4.3 Build the APK

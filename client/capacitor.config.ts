@@ -8,6 +8,13 @@ const config: CapacitorConfig = {
   android: {
     allowMixedContent: true,
   },
+  plugins: {
+    // Android 16 forces edge-to-edge: light status-bar icons on our dark UI, insets exposed to CSS.
+    SystemBars: {
+      insetsHandling: "css",
+      style: "DARK",
+    },
+  },
 };
 
 export default config;

@@ -1,5 +1,7 @@
 import type { Card } from "@hosn-obe/shared";
 
+import { tapFeedback } from "./native.js";
+
 /** A playing card; `null` renders a face-down back. */
 export function CardView({
   card,
@@ -49,7 +51,16 @@ export function CardView({
   );
 
   return onClick ? (
-    <button type="button" className={className} onClick={onClick} aria-pressed={selected} aria-label={label}>
+    <button
+      type="button"
+      className={className}
+      onClick={() => {
+        tapFeedback();
+        onClick();
+      }}
+      aria-pressed={selected}
+      aria-label={label}
+    >
       {face}
     </button>
   ) : (

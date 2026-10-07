@@ -13,6 +13,7 @@ import {
 
 import { CardView, Lives } from "./Card.js"
 import type { RoomCommands } from "./commands.js"
+import { turnFeedback } from "./native.js"
 import { useServerError } from "./useServerError.js"
 
 const POOL_LABEL: Record<PoolName, string> = {
@@ -166,6 +167,10 @@ export function Game({
   const showdown = view.phase === "roundEnd" || view.phase === "gameEnd"
   const offline = new Set(seatsOffline(room))
   const ev = view.lastEvent
+
+  useEffect(() => {
+    if (yourTurn) turnFeedback()
+  }, [yourTurn])
 
   function act(action: GameAction) {
     commands.act(action)

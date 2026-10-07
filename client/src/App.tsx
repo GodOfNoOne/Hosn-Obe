@@ -6,6 +6,7 @@ import { socketCommands } from "./commands.js";
 import { Game } from "./Game.js";
 import { Home } from "./Home.js";
 import { Lobby } from "./Lobby.js";
+import { exitApp, keepAwake, onBackButton, onResume } from "./native.js";
 import { PRACTICE_YOU_ID, PracticeTable, type PracticeSnapshot } from "./practice.js";
 import { Room } from "./Room.js";
 import { clearToken, loadName, loadToken, saveToken } from "./session.js";
@@ -69,6 +70,34 @@ export function App() {
       socket.off("game:state", setGame);
     };
   }, []);
+
+  const atTable = practice !== null || room !== null;
+  useEffect(() => keepAwake(atTable), [atTable]);
+
+  useEffect(
+    () =>
+      onResume(() => {
+        // A backgrounded WebView throttles reconnect timers; retry right away.
+        if (!socket.connected) socket.connect();
+      }),
+    [],
+  );
+
+  const backRef = useRef(() => {});
+  backRef.current = () => {
+    if (practice) {
+      if (practiceSnap?.room.phase !== "playing" || window.confirm("Quit practice?")) leavePractice();
+    } else if (room) {
+      const question =
+        room.phase === "playing" ? "Leave the game? A bot will take over your seat." : "Leave the room?";
+      if (window.confirm(question)) handleLeave();
+    } else if (screen !== "home") {
+      setScreen("home");
+    } else {
+      exitApp();
+    }
+  };
+  useEffect(() => onBackButton(() => backRef.current()), []);
 
   function handleJoined(id: string, token: string) {
     saveToken(token);
