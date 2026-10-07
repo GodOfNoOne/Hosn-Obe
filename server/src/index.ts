@@ -21,6 +21,7 @@ import {
   type ServerToClientEvents,
 } from "@hosn-obe/shared";
 
+import { log } from "./log.js";
 import { RoomError, RoomManager } from "./rooms.js";
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -53,6 +54,8 @@ function sync(code: string): void {
 }
 
 io.on("connection", (socket) => {
+  log(null, `client connected (${socket.id})`);
+
   function leaveCurrent(): void {
     const room = rooms.leaveRoom(socket.id);
     if (room) {
@@ -128,7 +131,8 @@ io.on("connection", (socket) => {
   socket.on("room:returnToLobby", () => mutate(() => rooms.returnToLobby(socket.id)));
   socket.on("game:action", (action) => mutate(() => rooms.gameAction(socket.id, action)));
 
-  socket.on("disconnect", () => {
+  socket.on("disconnect", (reason) => {
+    log(null, `client disconnected (${socket.id}, ${reason})`);
     const dropped = rooms.disconnect(socket.id);
     if (!dropped) return;
     const { room, playerId } = dropped;

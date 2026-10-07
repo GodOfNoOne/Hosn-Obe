@@ -28,6 +28,8 @@ import {
   type RoomState,
 } from "@hosn-obe/shared";
 
+import { log, q } from "./log.js";
+
 /** A rejected room operation; the message is safe to show to the user. */
 export class RoomError extends Error {}
 
@@ -98,6 +100,25 @@ function compactSeats(room: ServerRoom): void {
   room.seats = [...seated, ...Array<null>(room.maxPlayers - seated.length).fill(null)];
 }
 
+function playerNames(game: GameState, seats: number[]): string {
+  return seats.map((i) => q(game.players[i]!.name)).join(", ") || "nobody";
+}
+
+/** Apply a move and log the round/game outcome it may have caused. */
+function play(code: string, game: GameState, seat: number, action: GameAction): void {
+  applyAction(game, seat, action);
+  const r = game.result;
+  if (!r || (game.phase !== "roundEnd" && game.phase !== "gameEnd")) return;
+  const ev = game.lastEvent;
+  const how = ev.type === "layDown" ? `${q(game.players[ev.seat]!.name)} laid down` : "showdown";
+  const out = r.eliminated.length ? `; eliminated: ${playerNames(game, r.eliminated)}` : "";
+  log(code, `round ${game.round} ended (${how}) - lost a life: ${playerNames(game, r.losers)}${out}`);
+  if (game.phase === "gameEnd") {
+    const w = game.winnerIdx;
+    log(code, `game finished - winner: ${w === null ? "none" : q(game.players[w]!.name)}`);
+  }
+}
+
 export class RoomManager {
   private readonly rooms = new Map<string, ServerRoom>();
   private readonly sockets = new Map<string, Session>();
@@ -124,6 +145,7 @@ export class RoomManager {
     room.hostId = result.youId;
     room.seats[0]!.isHost = true;
     room.seats[0]!.ready = true;
+    log(code, `room created by ${q(room.seats[0]!.name)} (${size} seats)`);
     return result;
   }
 
@@ -136,7 +158,9 @@ export class RoomManager {
     if (seatIdx === -1) return { ok: false, error: "Room is full." };
 
     this.leaveRoom(socketId);
-    return this.seatHuman(room, seatIdx, socketId, name);
+    const result = this.seatHuman(room, seatIdx, socketId, name);
+    log(code, `${q(room.seats[seatIdx]!.name)} joined`);
+    return result;
   }
 
   /** Rebind a new connection to an existing seat. `staleSocketId` held it before. */
@@ -161,6 +185,7 @@ export class RoomManager {
     member.socketId = socketId;
     player.connected = true;
     this.sockets.set(socketId, session);
+    log(room.code, `${q(player.name)} reconnected`);
     return {
       result: { ok: true, code: room.code, youId: player.id, token: member.token },
       staleSocketId: stale,
@@ -173,6 +198,7 @@ export class RoomManager {
     if (!session) return null;
     const room = this.rooms.get(session.code);
     if (!room) return null;
+    log(room.code, `${q(this.playerName(room, session.playerId))} left`);
     this.removePlayer(room, session.playerId);
     return room;
   }
@@ -187,7 +213,10 @@ export class RoomManager {
     if (!room || !member) return null;
     member.socketId = null;
     const player = room.seats.find((p) => p?.id === session.playerId);
-    if (player) player.connected = false;
+    if (player) {
+      player.connected = false;
+      log(room.code, `${q(player.name)} disconnected`);
+    }
     return { room, playerId: session.playerId };
   }
 
@@ -196,7 +225,10 @@ export class RoomManager {
     const room = this.rooms.get(code);
     const member = room?.members.get(playerId);
     if (!room || !member || member.socketId !== null) return null;
-    if (room.phase === "lobby") this.removePlayer(room, playerId);
+    if (room.phase === "lobby") {
+      log(code, `${q(this.playerName(room, playerId))} did not come back; seat freed`);
+      this.removePlayer(room, playerId);
+    }
     if (this.rooms.has(code) && !humans(room).some((p) => p.connected)) this.deleteRoom(room);
     return room;
   }
@@ -205,7 +237,10 @@ export class RoomManager {
     const { room, playerId } = this.memberRoom(socketId);
     if (room.phase !== "lobby") throw new RoomError("The game has already started.");
     const player = room.seats.find((p) => p?.id === playerId);
-    if (player && !player.isHost) player.ready = ready === true;
+    if (player && !player.isHost && player.ready !== (ready === true)) {
+      player.ready = ready === true;
+      log(room.code, `${q(player.name)} is ${player.ready ? "ready" : "not ready"}`);
+    }
     return room;
   }
 
@@ -217,6 +252,7 @@ export class RoomManager {
     }
     room.maxPlayers = size;
     compactSeats(room);
+    log(room.code, `table size set to ${size}`);
     return room;
   }
 
@@ -224,7 +260,7 @@ export class RoomManager {
     const room = this.lobbyHostRoom(socketId);
     const idx = seatIndex(room, rawSeat);
     if (room.seats[idx]) throw new RoomError("That seat is taken.");
-    room.seats[idx] = {
+    const bot: RoomPlayer = {
       id: `bot:${randomUUID()}`,
       name: this.botName(room),
       isHost: false,
@@ -233,16 +269,20 @@ export class RoomManager {
       ready: true,
       connected: true,
     };
+    room.seats[idx] = bot;
     compactSeats(room);
+    log(room.code, `bot ${q(bot.name)} added (${bot.botLevel})`);
     return room;
   }
 
   removeBot(socketId: string, rawSeat: unknown): ServerRoom {
     const room = this.lobbyHostRoom(socketId);
     const idx = seatIndex(room, rawSeat);
-    if (!room.seats[idx]?.isBot) throw new RoomError("That seat has no bot.");
+    const bot = room.seats[idx];
+    if (!bot?.isBot) throw new RoomError("That seat has no bot.");
     room.seats[idx] = null;
     compactSeats(room);
+    log(room.code, `bot ${q(bot.name)} removed`);
     return room;
   }
 
@@ -251,6 +291,7 @@ export class RoomManager {
     const bot = room.seats[seatIndex(room, rawSeat)];
     if (!bot?.isBot) throw new RoomError("That seat has no bot.");
     if (!BOT_LEVELS.some((l) => l === level)) throw new RoomError("Invalid bot level.");
+    log(room.code, `bot ${q(bot.name)} level ${bot.botLevel} -> ${level as BotLevel}`);
     bot.botLevel = level as BotLevel;
     return room;
   }
@@ -263,6 +304,7 @@ export class RoomManager {
       throw new RoomError("You can't remove that seat.");
     }
     const kickedSocketId = room.members.get(target.id)?.socketId ?? null;
+    log(room.code, `${q(target.name)} was kicked by the host`);
     this.removePlayer(room, target.id);
     return { room, kickedSocketId };
   }
@@ -277,6 +319,10 @@ export class RoomManager {
       ),
     );
     room.phase = "playing";
+    const players = room.game.players.map((p) =>
+      p.isBot ? `${q(p.name)} (${p.botLevel})` : q(p.name),
+    );
+    log(room.code, `game started: ${players.join(", ")}`);
     return room;
   }
 
@@ -287,6 +333,7 @@ export class RoomManager {
     room.game = null;
     room.phase = "lobby";
     for (const p of seatedPlayers(room)) p.ready = p.isHost || p.isBot;
+    log(room.code, "back to lobby");
     return room;
   }
 
@@ -294,7 +341,7 @@ export class RoomManager {
     const { room, playerId } = this.memberRoom(socketId);
     const seat = room.game?.players.findIndex((p) => p.id === playerId) ?? -1;
     if (!room.game || seat === -1) throw new RoomError("You're not in a game.");
-    applyAction(room.game, seat, action);
+    play(room.code, room.game, seat, action);
     return room;
   }
 
@@ -316,7 +363,10 @@ export class RoomManager {
     let step: () => void;
     if (game.phase === "roundEnd") {
       delay = NEXT_ROUND_MS;
-      step = () => startRound(game);
+      step = () => {
+        startRound(game);
+        log(code, `round ${game.round} started`);
+      };
     } else if ((game.phase === "schieben" || game.phase === "play") && (current.isBot || away)) {
       const level = (current.isBot && current.botLevel) || STAND_IN_LEVEL;
       delay = current.isBot
@@ -325,10 +375,10 @@ export class RoomManager {
       step = () => {
         const seat = game.turnIdx;
         try {
-          applyAction(game, seat, chooseBotAction(viewFor(game, seat), level));
+          play(code, game, seat, chooseBotAction(viewFor(game, seat), level));
         } catch (err) {
           console.error("Bot move failed; falling back.", err);
-          applyAction(game, seat, { type: game.phase === "schieben" ? "KEEP" : "KNOCK" });
+          play(code, game, seat, { type: game.phase === "schieben" ? "KEEP" : "KNOCK" });
         }
       };
     } else {
@@ -410,6 +460,7 @@ export class RoomManager {
       const level = STAND_IN_LEVEL;
       Object.assign(player, { isBot: true, botLevel: level, isHost: false, ready: true, connected: true });
       convertToBot(room.game, playerId, level);
+      log(room.code, `${q(player.name)} replaced by a ${level} bot`);
     } else if (idx !== -1) {
       room.seats[idx] = null;
       compactSeats(room);
@@ -425,6 +476,7 @@ export class RoomManager {
       room.hostId = next.id;
       next.isHost = true;
       next.ready = true;
+      log(room.code, `${q(next.name)} is now the host`);
     }
   }
 
@@ -435,6 +487,11 @@ export class RoomManager {
       if (member.socketId) this.sockets.delete(member.socketId);
     }
     this.rooms.delete(room.code);
+    log(room.code, "room closed");
+  }
+
+  private playerName(room: ServerRoom, playerId: string): string {
+    return room.seats.find((p) => p?.id === playerId)?.name ?? "?";
   }
 
   private clearTimer(room: ServerRoom): void {
