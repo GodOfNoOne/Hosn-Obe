@@ -6,7 +6,7 @@
  * replace this later without changing the socket contract (see the plan).
  */
 
-import { randomInt, randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto"
 
 import {
   applyAction,
@@ -26,110 +26,139 @@ import {
   type RoomActionResult,
   type RoomPlayer,
   type RoomState,
-} from "@hosn-obe/shared";
+} from "@hosn-obe/shared"
 
-import { log, q } from "./log.js";
+import { log, q } from "./log.js"
 
 /** A rejected room operation; the message is safe to show to the user. */
 export class RoomError extends Error {}
 
-export const BOT_THINK_MS = { min: 600, max: 1400 };
-export const NEXT_ROUND_MS = 5000;
+export const BOT_THINK_MS = { min: 600, max: 1400 }
+export const NEXT_ROUND_MS = 5000
 /** A disconnected human's turn is played by a stand-in bot after this long. */
-export const AWAY_TURN_MS = 15_000;
+export const AWAY_TURN_MS = 15_000
 /** Skill of the stand-in for disconnected or departed humans. */
-const STAND_IN_LEVEL: BotLevel = "normal";
+const STAND_IN_LEVEL: BotLevel = "normal"
 
 interface Member {
   /** Secret that lets a new connection reclaim this seat. */
-  token: string;
-  socketId: string | null;
+  token: string
+  socketId: string | null
 }
 
 interface ServerRoom extends RoomState {
-  members: Map<string, Member>;
-  game: GameState | null;
-  timer: ReturnType<typeof setTimeout> | null;
+  members: Map<string, Member>
+  game: GameState | null
+  timer: ReturnType<typeof setTimeout> | null
 }
 
 interface Session {
-  code: string;
-  playerId: string;
+  code: string
+  playerId: string
 }
 
 /** Unambiguous code alphabet (no 0/O/1/I) to avoid misreads. */
-const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 function generateCode(): string {
-  let code = "";
+  let code = ""
   for (let i = 0; i < ROOM_LIMITS.codeLength; i++) {
-    code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
+    code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]
   }
-  return code;
+  return code
 }
 
 function sanitizeName(raw: unknown): string {
-  const name = typeof raw === "string" ? raw.trim() : "";
-  if (!name) return "Player";
-  return name.slice(0, ROOM_LIMITS.nameMaxLength);
+  const name = typeof raw === "string" ? raw.trim() : ""
+  if (!name) return "Player"
+  return name.slice(0, ROOM_LIMITS.nameMaxLength)
 }
 
 function clampMaxPlayers(raw: unknown): number {
-  const n = typeof raw === "number" && Number.isFinite(raw) ? Math.floor(raw) : 4;
-  return Math.min(ROOM_LIMITS.maxPlayers, Math.max(ROOM_LIMITS.minPlayers, n));
+  const n =
+    typeof raw === "number" && Number.isFinite(raw) ? Math.floor(raw) : 4
+  return Math.min(ROOM_LIMITS.maxPlayers, Math.max(ROOM_LIMITS.minPlayers, n))
 }
 
 function parseBotLevel(raw: unknown): BotLevel {
-  return BOT_LEVELS.find((l) => l === raw) ?? "normal";
+  return BOT_LEVELS.find((l) => l === raw) ?? "normal"
 }
 
 function seatIndex(room: ServerRoom, raw: unknown): number {
-  if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0 || raw >= room.seats.length) {
-    throw new RoomError("Invalid seat.");
+  if (
+    typeof raw !== "number" ||
+    !Number.isInteger(raw) ||
+    raw < 0 ||
+    raw >= room.seats.length
+  ) {
+    throw new RoomError("Invalid seat.")
   }
-  return raw;
+  return raw
 }
 
 function humans(room: ServerRoom): RoomPlayer[] {
-  return seatedPlayers(room).filter((p) => !p.isBot);
+  return seatedPlayers(room).filter((p) => !p.isBot)
 }
 
 /** Lobby seats behave like a stack: occupied seats first (in order), empty seats last. */
 function compactSeats(room: ServerRoom): void {
-  const seated = seatedPlayers(room);
-  room.seats = [...seated, ...Array<null>(room.maxPlayers - seated.length).fill(null)];
+  const seated = seatedPlayers(room)
+  room.seats = [
+    ...seated,
+    ...Array<null>(room.maxPlayers - seated.length).fill(null),
+  ]
 }
 
 function playerNames(game: GameState, seats: number[]): string {
-  return seats.map((i) => q(game.players[i]!.name)).join(", ") || "nobody";
+  return seats.map((i) => q(game.players[i]!.name)).join(", ") || "nobody"
 }
 
 /** Apply a move and log the round/game outcome it may have caused. */
-function play(code: string, game: GameState, seat: number, action: GameAction): void {
-  applyAction(game, seat, action);
-  const r = game.result;
-  if (!r || (game.phase !== "roundEnd" && game.phase !== "gameEnd")) return;
-  const ev = game.lastEvent;
-  const how = ev.type === "layDown" ? `${q(game.players[ev.seat]!.name)} laid down` : "showdown";
-  const out = r.eliminated.length ? `; eliminated: ${playerNames(game, r.eliminated)}` : "";
-  log(code, `round ${game.round} ended (${how}) - lost a life: ${playerNames(game, r.losers)}${out}`);
+function play(
+  code: string,
+  game: GameState,
+  seat: number,
+  action: GameAction,
+): void {
+  applyAction(game, seat, action)
+  const r = game.result
+  if (!r || (game.phase !== "roundEnd" && game.phase !== "gameEnd")) return
+  const ev = game.lastEvent
+  const how =
+    ev.type === "layDown"
+      ? `${q(game.players[ev.seat]!.name)} laid down`
+      : "showdown"
+  const out = r.eliminated.length
+    ? `; eliminated: ${playerNames(game, r.eliminated)}`
+    : ""
+  log(
+    code,
+    `round ${game.round} ended (${how}) - lost a life: ${playerNames(game, r.losers)}${out}`,
+  )
   if (game.phase === "gameEnd") {
-    const w = game.winnerIdx;
-    log(code, `game finished - winner: ${w === null ? "none" : q(game.players[w]!.name)}`);
+    const w = game.winnerIdx
+    log(
+      code,
+      `game finished - winner: ${w === null ? "none" : q(game.players[w]!.name)}`,
+    )
   }
 }
 
 export class RoomManager {
-  private readonly rooms = new Map<string, ServerRoom>();
-  private readonly sockets = new Map<string, Session>();
-  private readonly tokens = new Map<string, Session>();
+  private readonly rooms = new Map<string, ServerRoom>()
+  private readonly sockets = new Map<string, Session>()
+  private readonly tokens = new Map<string, Session>()
 
-  createRoom(socketId: string, name: unknown, maxPlayers: unknown): RoomActionResult {
-    this.leaveRoom(socketId);
+  createRoom(
+    socketId: string,
+    name: unknown,
+    maxPlayers: unknown,
+  ): RoomActionResult {
+    this.leaveRoom(socketId)
 
-    let code = generateCode();
-    while (this.rooms.has(code)) code = generateCode();
-    const size = clampMaxPlayers(maxPlayers);
+    let code = generateCode()
+    while (this.rooms.has(code)) code = generateCode()
+    const size = clampMaxPlayers(maxPlayers)
     const room: ServerRoom = {
       code,
       hostId: "",
@@ -139,28 +168,33 @@ export class RoomManager {
       members: new Map(),
       game: null,
       timer: null,
-    };
-    this.rooms.set(code, room);
-    const result = this.seatHuman(room, 0, socketId, name);
-    room.hostId = result.youId;
-    room.seats[0]!.isHost = true;
-    room.seats[0]!.ready = true;
-    log(code, `room created by ${q(room.seats[0]!.name)} (${size} seats)`);
-    return result;
+    }
+    this.rooms.set(code, room)
+    const result = this.seatHuman(room, 0, socketId, name)
+    room.hostId = result.youId
+    room.seats[0]!.isHost = true
+    room.seats[0]!.ready = true
+    log(code, `room created by ${q(room.seats[0]!.name)} (${size} seats)`)
+    return result
   }
 
-  joinRoom(socketId: string, rawCode: unknown, name: unknown): RoomActionResult {
-    const code = typeof rawCode === "string" ? rawCode.trim().toUpperCase() : "";
-    const room = this.rooms.get(code);
-    if (!room) return { ok: false, error: "Room not found." };
-    if (room.phase !== "lobby") return { ok: false, error: "Game already in progress." };
-    const seatIdx = room.seats.indexOf(null);
-    if (seatIdx === -1) return { ok: false, error: "Room is full." };
+  joinRoom(
+    socketId: string,
+    rawCode: unknown,
+    name: unknown,
+  ): RoomActionResult {
+    const code = typeof rawCode === "string" ? rawCode.trim().toUpperCase() : ""
+    const room = this.rooms.get(code)
+    if (!room) return { ok: false, error: "Room not found." }
+    if (room.phase !== "lobby")
+      return { ok: false, error: "Game already in progress." }
+    const seatIdx = room.seats.indexOf(null)
+    if (seatIdx === -1) return { ok: false, error: "Room is full." }
 
-    this.leaveRoom(socketId);
-    const result = this.seatHuman(room, seatIdx, socketId, name);
-    log(code, `${q(room.seats[seatIdx]!.name)} joined`);
-    return result;
+    this.leaveRoom(socketId)
+    const result = this.seatHuman(room, seatIdx, socketId, name)
+    log(code, `${q(room.seats[seatIdx]!.name)} joined`)
+    return result
   }
 
   /** Rebind a new connection to an existing seat. `staleSocketId` held it before. */
@@ -168,98 +202,118 @@ export class RoomManager {
     socketId: string,
     rawToken: unknown,
   ): { result: RoomActionResult; staleSocketId: string | null } {
-    const session = typeof rawToken === "string" ? this.tokens.get(rawToken) : undefined;
-    const room = session && this.rooms.get(session.code);
-    const member = room?.members.get(session!.playerId);
-    const player = room?.seats.find((p) => p?.id === session!.playerId);
+    const session =
+      typeof rawToken === "string" ? this.tokens.get(rawToken) : undefined
+    const room = session && this.rooms.get(session.code)
+    const member = room?.members.get(session!.playerId)
+    const player = room?.seats.find((p) => p?.id === session!.playerId)
     if (!session || !room || !member || !player) {
-      return { result: { ok: false, error: "Your seat is no longer available." }, staleSocketId: null };
+      return {
+        result: { ok: false, error: "Your seat is no longer available." },
+        staleSocketId: null,
+      }
     }
-    const current = this.sockets.get(socketId);
+    const current = this.sockets.get(socketId)
     if (current && current.playerId !== session.playerId) {
-      return { result: { ok: false, error: "Leave your current room first." }, staleSocketId: null };
+      return {
+        result: { ok: false, error: "Leave your current room first." },
+        staleSocketId: null,
+      }
     }
 
-    const stale = member.socketId !== socketId ? member.socketId : null;
-    if (stale) this.sockets.delete(stale);
-    member.socketId = socketId;
-    player.connected = true;
-    this.sockets.set(socketId, session);
-    log(room.code, `${q(player.name)} reconnected`);
+    const stale = member.socketId !== socketId ? member.socketId : null
+    if (stale) this.sockets.delete(stale)
+    member.socketId = socketId
+    player.connected = true
+    this.sockets.set(socketId, session)
+    log(room.code, `${q(player.name)} reconnected`)
     return {
-      result: { ok: true, code: room.code, youId: player.id, token: member.token },
+      result: {
+        ok: true,
+        code: room.code,
+        youId: player.id,
+        token: member.token,
+      },
       staleSocketId: stale,
-    };
+    }
   }
 
   /** Explicitly give up your seat. Returns the affected room, if any. */
   leaveRoom(socketId: string): ServerRoom | null {
-    const session = this.sockets.get(socketId);
-    if (!session) return null;
-    const room = this.rooms.get(session.code);
-    if (!room) return null;
-    log(room.code, `${q(this.playerName(room, session.playerId))} left`);
-    this.removePlayer(room, session.playerId);
-    return room;
+    const session = this.sockets.get(socketId)
+    if (!session) return null
+    const room = this.rooms.get(session.code)
+    if (!room) return null
+    log(room.code, `${q(this.playerName(room, session.playerId))} left`)
+    this.removePlayer(room, session.playerId)
+    return room
   }
 
   /** Connection dropped: keep the seat so the player can resume. */
   disconnect(socketId: string): { room: ServerRoom; playerId: string } | null {
-    const session = this.sockets.get(socketId);
-    if (!session) return null;
-    this.sockets.delete(socketId);
-    const room = this.rooms.get(session.code);
-    const member = room?.members.get(session.playerId);
-    if (!room || !member) return null;
-    member.socketId = null;
-    const player = room.seats.find((p) => p?.id === session.playerId);
+    const session = this.sockets.get(socketId)
+    if (!session) return null
+    this.sockets.delete(socketId)
+    const room = this.rooms.get(session.code)
+    const member = room?.members.get(session.playerId)
+    if (!room || !member) return null
+    member.socketId = null
+    const player = room.seats.find((p) => p?.id === session.playerId)
     if (player) {
-      player.connected = false;
-      log(room.code, `${q(player.name)} disconnected`);
+      player.connected = false
+      log(room.code, `${q(player.name)} disconnected`)
     }
-    return { room, playerId: session.playerId };
+    return { room, playerId: session.playerId }
   }
 
   /** Grace period over: free a still-disconnected lobby seat; drop rooms nobody is connected to. */
   expire(code: string, playerId: string): ServerRoom | null {
-    const room = this.rooms.get(code);
-    const member = room?.members.get(playerId);
-    if (!room || !member || member.socketId !== null) return null;
+    const room = this.rooms.get(code)
+    const member = room?.members.get(playerId)
+    if (!room || !member || member.socketId !== null) return null
     if (room.phase === "lobby") {
-      log(code, `${q(this.playerName(room, playerId))} did not come back; seat freed`);
-      this.removePlayer(room, playerId);
+      log(
+        code,
+        `${q(this.playerName(room, playerId))} did not come back; seat freed`,
+      )
+      this.removePlayer(room, playerId)
     }
-    if (this.rooms.has(code) && !humans(room).some((p) => p.connected)) this.deleteRoom(room);
-    return room;
+    if (this.rooms.has(code) && !humans(room).some((p) => p.connected))
+      this.deleteRoom(room)
+    return room
   }
 
   setReady(socketId: string, ready: unknown): ServerRoom {
-    const { room, playerId } = this.memberRoom(socketId);
-    if (room.phase !== "lobby") throw new RoomError("The game has already started.");
-    const player = room.seats.find((p) => p?.id === playerId);
+    const { room, playerId } = this.memberRoom(socketId)
+    if (room.phase !== "lobby")
+      throw new RoomError("The game has already started.")
+    const player = room.seats.find((p) => p?.id === playerId)
     if (player && !player.isHost && player.ready !== (ready === true)) {
-      player.ready = ready === true;
-      log(room.code, `${q(player.name)} is ${player.ready ? "ready" : "not ready"}`);
+      player.ready = ready === true
+      log(
+        room.code,
+        `${q(player.name)} is ${player.ready ? "ready" : "not ready"}`,
+      )
     }
-    return room;
+    return room
   }
 
   setMaxPlayers(socketId: string, raw: unknown): ServerRoom {
-    const room = this.lobbyHostRoom(socketId);
-    const size = clampMaxPlayers(raw);
+    const room = this.lobbyHostRoom(socketId)
+    const size = clampMaxPlayers(raw)
     if (seatedPlayers(room).length > size) {
-      throw new RoomError("Remove players before shrinking the table.");
+      throw new RoomError("Remove players before shrinking the table.")
     }
-    room.maxPlayers = size;
-    compactSeats(room);
-    log(room.code, `table size set to ${size}`);
-    return room;
+    room.maxPlayers = size
+    compactSeats(room)
+    log(room.code, `table size set to ${size}`)
+    return room
   }
 
   addBot(socketId: string, rawSeat: unknown, level: unknown): ServerRoom {
-    const room = this.lobbyHostRoom(socketId);
-    const idx = seatIndex(room, rawSeat);
-    if (room.seats[idx]) throw new RoomError("That seat is taken.");
+    const room = this.lobbyHostRoom(socketId)
+    const idx = seatIndex(room, rawSeat)
+    if (room.seats[idx]) throw new RoomError("That seat is taken.")
     const bot: RoomPlayer = {
       id: `bot:${randomUUID()}`,
       name: this.botName(room),
@@ -268,81 +322,88 @@ export class RoomManager {
       botLevel: parseBotLevel(level),
       ready: true,
       connected: true,
-    };
-    room.seats[idx] = bot;
-    compactSeats(room);
-    log(room.code, `bot ${q(bot.name)} added (${bot.botLevel})`);
-    return room;
+    }
+    room.seats[idx] = bot
+    compactSeats(room)
+    log(room.code, `bot ${q(bot.name)} added (${bot.botLevel})`)
+    return room
   }
 
   removeBot(socketId: string, rawSeat: unknown): ServerRoom {
-    const room = this.lobbyHostRoom(socketId);
-    const idx = seatIndex(room, rawSeat);
-    const bot = room.seats[idx];
-    if (!bot?.isBot) throw new RoomError("That seat has no bot.");
-    room.seats[idx] = null;
-    compactSeats(room);
-    log(room.code, `bot ${q(bot.name)} removed`);
-    return room;
+    const room = this.lobbyHostRoom(socketId)
+    const idx = seatIndex(room, rawSeat)
+    const bot = room.seats[idx]
+    if (!bot?.isBot) throw new RoomError("That seat has no bot.")
+    room.seats[idx] = null
+    compactSeats(room)
+    log(room.code, `bot ${q(bot.name)} removed`)
+    return room
   }
 
   setBotLevel(socketId: string, rawSeat: unknown, level: unknown): ServerRoom {
-    const room = this.lobbyHostRoom(socketId);
-    const bot = room.seats[seatIndex(room, rawSeat)];
-    if (!bot?.isBot) throw new RoomError("That seat has no bot.");
-    if (!BOT_LEVELS.some((l) => l === level)) throw new RoomError("Invalid bot level.");
-    log(room.code, `bot ${q(bot.name)} level ${bot.botLevel} -> ${level as BotLevel}`);
-    bot.botLevel = level as BotLevel;
-    return room;
+    const room = this.lobbyHostRoom(socketId)
+    const bot = room.seats[seatIndex(room, rawSeat)]
+    if (!bot?.isBot) throw new RoomError("That seat has no bot.")
+    if (!BOT_LEVELS.some((l) => l === level))
+      throw new RoomError("Invalid bot level.")
+    log(
+      room.code,
+      `bot ${q(bot.name)} level ${bot.botLevel} -> ${level as BotLevel}`,
+    )
+    bot.botLevel = level as BotLevel
+    return room
   }
 
   /** Remove a human from the host's room; returns their socket (if connected). */
-  kick(socketId: string, rawSeat: unknown): { room: ServerRoom; kickedSocketId: string | null } {
-    const room = this.lobbyHostRoom(socketId);
-    const target = room.seats[seatIndex(room, rawSeat)];
+  kick(
+    socketId: string,
+    rawSeat: unknown,
+  ): { room: ServerRoom; kickedSocketId: string | null } {
+    const room = this.lobbyHostRoom(socketId)
+    const target = room.seats[seatIndex(room, rawSeat)]
     if (!target || target.isBot || target.id === room.hostId) {
-      throw new RoomError("You can't remove that seat.");
+      throw new RoomError("You can't remove that seat.")
     }
-    const kickedSocketId = room.members.get(target.id)?.socketId ?? null;
-    log(room.code, `${q(target.name)} was kicked by the host`);
-    this.removePlayer(room, target.id);
-    return { room, kickedSocketId };
+    const kickedSocketId = room.members.get(target.id)?.socketId ?? null
+    log(room.code, `${q(target.name)} was kicked by the host`)
+    this.removePlayer(room, target.id)
+    return { room, kickedSocketId }
   }
 
   start(socketId: string): ServerRoom {
-    const room = this.lobbyHostRoom(socketId);
-    const blocker = startBlocker(room);
-    if (blocker) throw new RoomError(blocker);
+    const room = this.lobbyHostRoom(socketId)
+    const blocker = startBlocker(room)
+    if (blocker) throw new RoomError(blocker)
     room.game = createGame(
       seatedPlayers(room).map(({ id, name, isBot, botLevel }) =>
         botLevel ? { id, name, isBot, botLevel } : { id, name, isBot },
       ),
-    );
-    room.phase = "playing";
+    )
+    room.phase = "playing"
     const players = room.game.players.map((p) =>
       p.isBot ? `${q(p.name)} (${p.botLevel})` : q(p.name),
-    );
-    log(room.code, `game started: ${players.join(", ")}`);
-    return room;
+    )
+    log(room.code, `game started: ${players.join(", ")}`)
+    return room
   }
 
   returnToLobby(socketId: string): ServerRoom {
-    const room = this.hostRoom(socketId).room;
-    if (room.phase === "lobby") return room;
-    this.clearTimer(room);
-    room.game = null;
-    room.phase = "lobby";
-    for (const p of seatedPlayers(room)) p.ready = p.isHost || p.isBot;
-    log(room.code, "back to lobby");
-    return room;
+    const room = this.hostRoom(socketId).room
+    if (room.phase === "lobby") return room
+    this.clearTimer(room)
+    room.game = null
+    room.phase = "lobby"
+    for (const p of seatedPlayers(room)) p.ready = p.isHost || p.isBot
+    log(room.code, "back to lobby")
+    return room
   }
 
   gameAction(socketId: string, action: GameAction): ServerRoom {
-    const { room, playerId } = this.memberRoom(socketId);
-    const seat = room.game?.players.findIndex((p) => p.id === playerId) ?? -1;
-    if (!room.game || seat === -1) throw new RoomError("You're not in a game.");
-    play(room.code, room.game, seat, action);
-    return room;
+    const { room, playerId } = this.memberRoom(socketId)
+    const seat = room.game?.players.findIndex((p) => p.id === playerId) ?? -1
+    if (!room.game || seat === -1) throw new RoomError("You're not in a game.")
+    play(room.code, room.game, seat, action)
+    return room
   }
 
   /**
@@ -351,65 +412,74 @@ export class RoomManager {
    * `onStep` runs after each automatic step.
    */
   schedule(code: string, onStep: (code: string) => void): void {
-    const room = this.rooms.get(code);
-    if (!room) return;
-    this.clearTimer(room);
-    const game = room.game;
-    if (!game) return;
+    const room = this.rooms.get(code)
+    if (!room) return
+    this.clearTimer(room)
+    const game = room.game
+    if (!game) return
 
-    const current = game.players[game.turnIdx]!;
-    const away = room.seats.find((p) => p?.id === current.id)?.connected === false;
-    let delay: number;
-    let step: () => void;
+    const current = game.players[game.turnIdx]!
+    const away =
+      room.seats.find((p) => p?.id === current.id)?.connected === false
+    let delay: number
+    let step: () => void
     if (game.phase === "roundEnd") {
-      delay = NEXT_ROUND_MS;
+      delay = NEXT_ROUND_MS
       step = () => {
-        startRound(game);
-        log(code, `round ${game.round} started`);
-      };
-    } else if ((game.phase === "schieben" || game.phase === "play") && (current.isBot || away)) {
-      const level = (current.isBot && current.botLevel) || STAND_IN_LEVEL;
+        startRound(game)
+        log(code, `round ${game.round} started`)
+      }
+    } else if (
+      (game.phase === "schieben" || game.phase === "play") &&
+      (current.isBot || away)
+    ) {
+      const level = (current.isBot && current.botLevel) || STAND_IN_LEVEL
       delay = current.isBot
-        ? BOT_THINK_MS.min + Math.random() * (BOT_THINK_MS.max - BOT_THINK_MS.min)
-        : AWAY_TURN_MS;
+        ? BOT_THINK_MS.min +
+          Math.random() * (BOT_THINK_MS.max - BOT_THINK_MS.min)
+        : AWAY_TURN_MS
       step = () => {
-        const seat = game.turnIdx;
+        const seat = game.turnIdx
         try {
-          play(code, game, seat, chooseBotAction(viewFor(game, seat), level));
+          play(code, game, seat, chooseBotAction(viewFor(game, seat), level))
         } catch (err) {
-          console.error("Bot move failed; falling back.", err);
-          play(code, game, seat, { type: game.phase === "schieben" ? "KEEP" : "KNOCK" });
+          console.error("Bot move failed; falling back.", err)
+          play(code, game, seat, {
+            type: game.phase === "schieben" ? "KEEP" : "KNOCK",
+          })
         }
-      };
+      }
     } else {
-      return;
+      return
     }
 
     room.timer = setTimeout(() => {
-      room.timer = null;
-      if (this.rooms.get(code) !== room || room.game !== game) return;
-      step();
-      onStep(code);
-    }, delay);
+      room.timer = null
+      if (this.rooms.get(code) !== room || room.game !== game) return
+      step()
+      onStep(code)
+    }, delay)
   }
 
   /** Each connected player's socket paired with their personalized view. */
   gameViews(code: string): [socketId: string, view: GameView][] {
-    const room = this.rooms.get(code);
-    const game = room?.game;
-    if (!room || !game) return [];
+    const room = this.rooms.get(code)
+    const game = room?.game
+    if (!room || !game) return []
     return game.players.flatMap((p, seat) => {
-      const socketId = room.members.get(p.id)?.socketId;
-      return socketId ? [[socketId, viewFor(game, seat)] as [string, GameView]] : [];
-    });
+      const socketId = room.members.get(p.id)?.socketId
+      return socketId
+        ? [[socketId, viewFor(game, seat)] as [string, GameView]]
+        : []
+    })
   }
 
   getRoom(code: string): RoomState | null {
-    return this.rooms.get(code) ?? null;
+    return this.rooms.get(code) ?? null
   }
 
   getGame(code: string): GameState | null {
-    return this.rooms.get(code)?.game ?? null;
+    return this.rooms.get(code)?.game ?? null
   }
 
   toState(room: RoomState): RoomState {
@@ -419,7 +489,7 @@ export class RoomManager {
       maxPlayers: room.maxPlayers,
       seats: room.seats.map((p) => (p ? { ...p } : null)),
       phase: room.phase,
-    };
+    }
   }
 
   private seatHuman(
@@ -428,8 +498,8 @@ export class RoomManager {
     socketId: string,
     name: unknown,
   ): RoomActionResult & { ok: true } {
-    const id = randomUUID();
-    const token = randomUUID();
+    const id = randomUUID()
+    const token = randomUUID()
     room.seats[seatIdx] = {
       id,
       name: sanitizeName(name),
@@ -437,91 +507,99 @@ export class RoomManager {
       isBot: false,
       ready: false,
       connected: true,
-    };
-    room.members.set(id, { token, socketId });
-    const session = { code: room.code, playerId: id };
-    this.sockets.set(socketId, session);
-    this.tokens.set(token, session);
-    return { ok: true, code: room.code, youId: id, token };
+    }
+    room.members.set(id, { token, socketId })
+    const session = { code: room.code, playerId: id }
+    this.sockets.set(socketId, session)
+    this.tokens.set(token, session)
+    return { ok: true, code: room.code, youId: id, token }
   }
 
   /** Free a human's seat (or hand it to a bot mid-game), promoting a new host if needed. */
   private removePlayer(room: ServerRoom, playerId: string): void {
-    const member = room.members.get(playerId);
+    const member = room.members.get(playerId)
     if (member) {
-      this.tokens.delete(member.token);
-      if (member.socketId) this.sockets.delete(member.socketId);
-      room.members.delete(playerId);
+      this.tokens.delete(member.token)
+      if (member.socketId) this.sockets.delete(member.socketId)
+      room.members.delete(playerId)
     }
 
-    const idx = room.seats.findIndex((p) => p?.id === playerId);
-    const player = room.seats[idx];
+    const idx = room.seats.findIndex((p) => p?.id === playerId)
+    const player = room.seats[idx]
     if (player && room.game) {
-      const level = STAND_IN_LEVEL;
-      Object.assign(player, { isBot: true, botLevel: level, isHost: false, ready: true, connected: true });
-      convertToBot(room.game, playerId, level);
-      log(room.code, `${q(player.name)} replaced by a ${level} bot`);
+      const level = STAND_IN_LEVEL
+      Object.assign(player, {
+        isBot: true,
+        botLevel: level,
+        isHost: false,
+        ready: true,
+        connected: true,
+      })
+      convertToBot(room.game, playerId, level)
+      log(room.code, `${q(player.name)} replaced by a ${level} bot`)
     } else if (idx !== -1) {
-      room.seats[idx] = null;
-      compactSeats(room);
+      room.seats[idx] = null
+      compactSeats(room)
     }
 
-    const remaining = humans(room);
+    const remaining = humans(room)
     if (remaining.length === 0) {
-      this.deleteRoom(room);
-      return;
+      this.deleteRoom(room)
+      return
     }
     if (room.hostId === playerId) {
-      const next = remaining.find((p) => p.connected) ?? remaining[0]!;
-      room.hostId = next.id;
-      next.isHost = true;
-      next.ready = true;
-      log(room.code, `${q(next.name)} is now the host`);
+      const next = remaining.find((p) => p.connected) ?? remaining[0]!
+      room.hostId = next.id
+      next.isHost = true
+      next.ready = true
+      log(room.code, `${q(next.name)} is now the host`)
     }
   }
 
   private deleteRoom(room: ServerRoom): void {
-    this.clearTimer(room);
+    this.clearTimer(room)
     for (const member of room.members.values()) {
-      this.tokens.delete(member.token);
-      if (member.socketId) this.sockets.delete(member.socketId);
+      this.tokens.delete(member.token)
+      if (member.socketId) this.sockets.delete(member.socketId)
     }
-    this.rooms.delete(room.code);
-    log(room.code, "room closed");
+    this.rooms.delete(room.code)
+    log(room.code, "room closed")
   }
 
   private playerName(room: ServerRoom, playerId: string): string {
-    return room.seats.find((p) => p?.id === playerId)?.name ?? "?";
+    return room.seats.find((p) => p?.id === playerId)?.name ?? "?"
   }
 
   private clearTimer(room: ServerRoom): void {
-    if (room.timer) clearTimeout(room.timer);
-    room.timer = null;
+    if (room.timer) clearTimeout(room.timer)
+    room.timer = null
   }
 
   private memberRoom(socketId: string): { room: ServerRoom; playerId: string } {
-    const session = this.sockets.get(socketId);
-    const room = session && this.rooms.get(session.code);
-    if (!session || !room) throw new RoomError("You are not in a room.");
-    return { room, playerId: session.playerId };
+    const session = this.sockets.get(socketId)
+    const room = session && this.rooms.get(session.code)
+    if (!session || !room) throw new RoomError("You are not in a room.")
+    return { room, playerId: session.playerId }
   }
 
   private hostRoom(socketId: string): { room: ServerRoom; playerId: string } {
-    const member = this.memberRoom(socketId);
-    if (member.room.hostId !== member.playerId) throw new RoomError("Only the host can do that.");
-    return member;
+    const member = this.memberRoom(socketId)
+    if (member.room.hostId !== member.playerId)
+      throw new RoomError("Only the host can do that.")
+    return member
   }
 
   private lobbyHostRoom(socketId: string): ServerRoom {
-    const { room } = this.hostRoom(socketId);
-    if (room.phase !== "lobby") throw new RoomError("The game has already started.");
-    return room;
+    const { room } = this.hostRoom(socketId)
+    if (room.phase !== "lobby")
+      throw new RoomError("The game has already started.")
+    return room
   }
 
   private botName(room: ServerRoom): string {
-    const taken = new Set(seatedPlayers(room).map((p) => p.name));
-    let n = 1;
-    while (taken.has(`Bot ${n}`)) n++;
-    return `Bot ${n}`;
+    const taken = new Set(seatedPlayers(room).map((p) => p.name))
+    let n = 1
+    while (taken.has(`Bot ${n}`)) n++
+    return `Bot ${n}`
   }
 }
