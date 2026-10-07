@@ -1,6 +1,6 @@
-import type { Card } from "@hosn-obe/shared";
+import type { Card } from "@hosn-obe/shared"
 
-import { tapFeedback } from "./native.js";
+import { tapFeedback } from "./native.js"
 
 /** A playing card; `null` renders a face-down back. */
 export function CardView({
@@ -11,12 +11,12 @@ export function CardView({
   onClick,
   label,
 }: {
-  card: Card | null;
-  size?: "sm" | "md";
-  selected?: boolean;
-  flash?: boolean;
-  onClick?: () => void;
-  label?: string;
+  card: Card | null
+  size?: "sm" | "md"
+  selected?: boolean
+  flash?: boolean
+  onClick?: () => void
+  label?: string
 }) {
   const className = [
     "card",
@@ -27,7 +27,7 @@ export function CardView({
     flash ? "swap-flash" : "",
   ]
     .filter(Boolean)
-    .join(" ");
+    .join(" ")
 
   const face = !card ? (
     <span className="qmark">?</span>
@@ -48,32 +48,31 @@ export function CardView({
         {card.suit}
       </span>
     </>
-  );
+  )
 
   return onClick ? (
     <button
       type="button"
       className={className}
       onClick={() => {
-        tapFeedback();
-        onClick();
+        tapFeedback()
+        onClick()
       }}
       aria-pressed={selected}
-      aria-label={label}
-    >
+      aria-label={label}>
       {face}
     </button>
   ) : (
     <div className={className} aria-label={label}>
       {face}
     </div>
-  );
+  )
 }
 
 /** Lives as small low cards; 0 = swimming, below 0 = out. */
 export function Lives({ lives }: { lives: number }) {
-  if (lives < 0) return <span className="lives lives--out">out</span>;
-  if (lives === 0) return <span className="lives swimming">swimming!</span>;
+  if (lives < 0) return <span className="lives lives--out">out</span>
+  if (lives === 0) return <span className="lives swimming">swimming!</span>
   return (
     <span className="lives" aria-label={`${lives} lives`}>
       {Array.from({ length: lives }, (_, i) => (
@@ -82,5 +81,5 @@ export function Lives({ lives }: { lives: number }) {
         </span>
       ))}
     </span>
-  );
+  )
 }

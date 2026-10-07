@@ -1,4 +1,4 @@
-import type { CapacitorConfig } from "@capacitor/cli";
+import type { CapacitorConfig } from "@capacitor/cli"
 
 const config: CapacitorConfig = {
   appId: "com.godofnoone.hosnobe",
@@ -15,6 +15,6 @@ const config: CapacitorConfig = {
       style: "DARK",
     },
   },
-};
+}
 
-export default config;
+export default config

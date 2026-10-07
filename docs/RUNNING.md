@@ -23,12 +23,12 @@ just means: start one server, then point two or more clients at it.
 
 ## 1. Prerequisites
 
-| Tool | Needed for | Notes |
-|------|-----------|-------|
-| Node.js ≥ 20 | server + client | developed on Node 24 |
-| npm ≥ 10 | workspaces | bundled with Node |
-| JDK 21 (64-bit) | building the Android APK | Microsoft OpenJDK 21; Gradle 8.14.3 does **not** support JDK 25 |
-| Android SDK (platform 36, build-tools 36, platform-tools) | APK + device install | installed under `%LOCALAPPDATA%\Android\Sdk` |
+| Tool                                                      | Needed for               | Notes                                                           |
+| --------------------------------------------------------- | ------------------------ | --------------------------------------------------------------- |
+| Node.js ≥ 20                                              | server + client          | developed on Node 24                                            |
+| npm ≥ 10                                                  | workspaces               | bundled with Node                                               |
+| JDK 21 (64-bit)                                           | building the Android APK | Microsoft OpenJDK 21; Gradle 8.14.3 does **not** support JDK 25 |
+| Android SDK (platform 36, build-tools 36, platform-tools) | APK + device install     | installed under `%LOCALAPPDATA%\Android\Sdk`                    |
 
 On this machine the toolchain lives at:
 
@@ -187,8 +187,8 @@ to play across devices.
 
 ## 5. Simulate on an Android emulator (optional)
 
-Requires **CPU virtualization enabled in BIOS/UEFI** (AMD: *SVM Mode*; Intel:
-*VT-x*). Without it the x86_64 emulator cannot start — check with:
+Requires **CPU virtualization enabled in BIOS/UEFI** (AMD: _SVM Mode_; Intel:
+_VT-x_). Without it the x86_64 emulator cannot start — check with:
 
 ```bash
 systeminfo | grep -i "Virtualization Enabled In Firmware"
@@ -213,15 +213,15 @@ alias for the host PC) and rebuild/reinstall the APK as in section 4.3/4.6.
 
 ## 6. Quick reference
 
-| Task | Command |
-|------|---------|
-| Start server | `npm run dev:server` |
-| Start PC client | `npm run dev:client` → http://localhost:5173 |
-| Server health | open `http://localhost:3000/health` |
-| PC LAN IP | `ipconfig` (IPv4 of your LAN adapter) |
-| Build APK | `cd client && npm run build && npx cap sync android && (cd android && ./gradlew assembleDebug)` |
-| List devices | `"$ANDROID_HOME/platform-tools/adb.exe" devices` |
-| Install APK | `adb -s <device> install -r app/build/outputs/apk/debug/app-debug.apk` |
+| Task            | Command                                                                                         |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| Start server    | `npm run dev:server`                                                                            |
+| Start PC client | `npm run dev:client` → http://localhost:5173                                                    |
+| Server health   | open `http://localhost:3000/health`                                                             |
+| PC LAN IP       | `ipconfig` (IPv4 of your LAN adapter)                                                           |
+| Build APK       | `cd client && npm run build && npx cap sync android && (cd android && ./gradlew assembleDebug)` |
+| List devices    | `"$ANDROID_HOME/platform-tools/adb.exe" devices`                                                |
+| Install APK     | `adb -s <device> install -r app/build/outputs/apk/debug/app-debug.apk`                          |
 
 ## 7. Troubleshooting
 
