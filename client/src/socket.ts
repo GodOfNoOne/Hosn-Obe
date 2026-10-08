@@ -5,12 +5,9 @@ import type {
   ServerToClientEvents,
 } from "@hosn-obe/shared"
 
-import { loadServerUrl } from "./session.js"
-
-export const DEFAULT_SERVER_URL =
-  import.meta.env.VITE_SERVER_URL ?? "http://localhost:3000"
+const url = import.meta.env.VITE_SERVER_URL ?? "http://localhost:3000"
 
 export const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(
-  loadServerUrl() ?? DEFAULT_SERVER_URL,
+  url,
   { autoConnect: true },
 )

@@ -22,15 +22,3 @@ export function loadName(): string {
 export function saveName(name: string): void {
   localStorage.setItem(NAME_KEY, name.trim())
 }
-
-const SERVER_KEY = "hosnobe.server"
-
-/** Server address chosen in Settings, or `null` for the built-in default. */
-export function loadServerUrl(): string | null {
-  return localStorage.getItem(SERVER_KEY)
-}
-
-export function saveServerUrl(url: string | null): void {
-  if (url) localStorage.setItem(SERVER_KEY, url)
-  else localStorage.removeItem(SERVER_KEY)
-}
