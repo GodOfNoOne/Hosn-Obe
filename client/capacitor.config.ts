@@ -4,7 +4,7 @@ const config: CapacitorConfig = {
   appId: "com.godofnoone.hosnobe",
   appName: "Hosn Obe",
   webDir: "dist",
-  // Dev: WebView is served from https://localhost; allow it to reach the plain-http LAN server.
+  // Dev: WebView is served from https://localhost; allow it to reach a plain-http LAN server (debug builds only permit cleartext).
   android: {
     allowMixedContent: true,
   },

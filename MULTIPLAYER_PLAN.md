@@ -260,7 +260,7 @@ full state exists only on the server.
 | 5 — N players + lives       | ✅ Done        | Engine already generic (2–8 seats, rotating opener skipping the eliminated, knock-around, 3 lives + swimming, ties all lose, match winner); added 3+ player tests (multi-loser tie, game continues after an elimination) and an "you're out — watching" state in the UI                                                                                                                                                                                                                                                                                     |
 | 6 — Native plugins & polish | ✅ Done        | KeepAwake while at a table; Haptics on card taps and when your turn starts; core `SystemBars` (light icons, safe-area insets as CSS vars — Android 16 forces edge-to-edge, so the StatusBar plugin's color/overlay options no longer apply); Android back button (leave room/practice with confirm, else home, else exit); socket reconnects immediately on app resume; client connects only to the build-time server (`VITE_SERVER_URL`), Settings stays a placeholder until the game is done                                                              |
 | 7 — Mobile resilience       | ✅ Done        | 30 s turn timer for humans (15 s when disconnected), then a normal stand-in moves; server sends time left (not a timestamp) and never extends a running deadline on reconnect/re-sync; countdown bar hidden while disconnected. Spectators: joining a running game watches it (no hands shown) and takes a free seat back in the lobby. Synthesized sounds (cards, knock, your turn, last-5 s ticks, lay down, lose/win) with a mute toggle. Offline/reconnecting banner with "server may be waking up" hint. Landscape layout (table left, controls right) |
-| 8 — Release & deploy        | ⬜ Not started |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| 8 — Release & deploy        | 🟡 In progress | Server on Render (`https://hosn-obe.onrender.com`, build `npm ci && npm run build -w @hosn-obe/shared -w @hosn-obe/server`, start `npm start -w @hosn-obe/server`, health `/health`); debug APK points at it. App version 1 / "1.0"; `PROTOCOL_VERSION` handshake turns away out-of-date apps with an "update" banner. Security pass (§10): per-socket rate limit, 10 KB message cap, CSPRNG deals, cleartext HTTP allowed in debug builds only. Left for a public release: signing keystore + signed release APK/AAB, Play Store |
 
 ### Phase 0 — Extract logic (no UI change)
 
@@ -357,15 +357,15 @@ feel native.)
 
 ## 10. Security & Fairness Checklist
 
-- [ ] All game logic runs **server-side**; client only sends intents.
-- [ ] Server validates every `Action` (right player, right phase, legal move).
-- [ ] Opponents' cards **never** leave the server until showdown.
-- [ ] Deck shuffled server-side with a CSPRNG.
-- [ ] Rate-limit socket events; validate room codes; cap players per room.
-- [ ] Reconnection uses a signed session token, not a guessable id.
-- [ ] APK talks to the server over **WSS/HTTPS** only (no cleartext in release).
+- [x] All game logic runs **server-side**; client only sends intents.
+- [x] Server validates every `Action` (right player, right phase, legal move).
+- [x] Opponents' cards **never** leave the server until showdown.
+- [x] Deck shuffled server-side with a CSPRNG.
+- [x] Rate-limit socket events; validate room codes; cap players per room.
+- [x] Reconnection uses a random secret token (crypto UUID), not a guessable id.
+- [x] APK talks to the server over **WSS/HTTPS** only (cleartext is allowed in debug builds only).
 - [ ] Release APK is **signed**; keystore kept out of the repo.
-- [ ] Don't ship secrets in the APK — the client only needs the public server URL.
+- [x] Don't ship secrets in the APK — the client only needs the public server URL.
 
 ---
 

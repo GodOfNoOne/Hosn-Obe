@@ -6,7 +6,7 @@
  * replace this later without changing the socket contract (see the plan).
  */
 
-import { randomInt, randomUUID } from "node:crypto"
+import { randomBytes, randomInt, randomUUID } from "node:crypto"
 
 import {
   applyAction,
@@ -71,6 +71,11 @@ function generateCode(): string {
     code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]
   }
   return code
+}
+
+/** CSPRNG in [0, 1) so deals can't be predicted from earlier ones. */
+function secureRandom(): number {
+  return randomBytes(4).readUInt32BE() / 2 ** 32
 }
 
 function sanitizeName(raw: unknown): string {
@@ -411,6 +416,7 @@ export class RoomManager {
       seatedPlayers(room).map(({ id, name, isBot, botLevel }) =>
         botLevel ? { id, name, isBot, botLevel } : { id, name, isBot },
       ),
+      secureRandom,
     )
     room.phase = "playing"
     room.deadline = null
@@ -476,7 +482,7 @@ export class RoomManager {
     if (kind === "round") {
       delay = NEXT_ROUND_MS
       step = () => {
-        startRound(game)
+        startRound(game, secureRandom)
         log(code, `round ${game.round} started`)
       }
     } else {

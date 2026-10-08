@@ -54,6 +54,11 @@ export const ROOM_LIMITS = {
   turnMs: 30_000,
 } as const
 
+/** Bump on breaking socket changes; the server turns away apps built for another version. */
+export const PROTOCOL_VERSION = 1
+export const OUTDATED_CLIENT_ERROR =
+  "This app is out of date. Install the latest version to play online."
+
 export function seatedPlayers(room: Pick<RoomState, "seats">): RoomPlayer[] {
   return room.seats.filter((p): p is RoomPlayer => p !== null)
 }

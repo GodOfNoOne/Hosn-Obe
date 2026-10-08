@@ -17,7 +17,12 @@ android {
         }
     }
     buildTypes {
+        // Plain-http LAN servers are for debugging only; release builds talk HTTPS/WSS.
+        debug {
+            manifestPlaceholders = [usesCleartextTraffic: "true"]
+        }
         release {
+            manifestPlaceholders = [usesCleartextTraffic: "false"]
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

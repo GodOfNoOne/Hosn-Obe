@@ -15,6 +15,8 @@ import { Server } from "socket.io"
 
 import {
   GameError,
+  OUTDATED_CLIENT_ERROR,
+  PROTOCOL_VERSION,
   type ClientToServerEvents,
   type RoomActionResult,
   type RoomState,
@@ -30,6 +32,8 @@ const ORIGIN = process.env.CLIENT_ORIGIN ?? "*"
 const corsOrigin = ORIGIN === "*" ? "*" : ORIGIN.split(",").map((o) => o.trim())
 /** How long a dropped connection keeps its lobby seat (and the room stays alive). */
 const RESUME_GRACE_MS = 60_000
+/** Per-connection event budget: bursts up to `burst`, refilling `perSec` each second. */
+const RATE = { burst: 20, perSec: 5 }
 
 const app = express()
 app.use(cors({ origin: corsOrigin }))
@@ -38,6 +42,13 @@ app.get("/health", (_req, res) => res.json({ ok: true }))
 const httpServer = createServer(app)
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   cors: { origin: corsOrigin },
+  // Every client message is tiny; reject anything bigger outright.
+  maxHttpBufferSize: 10_000,
+})
+
+io.use((socket, next) => {
+  if (socket.handshake.auth?.protocol === PROTOCOL_VERSION) next()
+  else next(new Error(OUTDATED_CLIENT_ERROR))
 })
 
 const rooms = new RoomManager()
@@ -55,6 +66,23 @@ function sync(code: string): void {
 
 io.on("connection", (socket) => {
   log(null, `client connected (${socket.id})`)
+
+  let budget = RATE.burst
+  let refilledAt = Date.now()
+  socket.use((_packet, next) => {
+    const now = Date.now()
+    budget = Math.min(
+      RATE.burst,
+      budget + ((now - refilledAt) / 1000) * RATE.perSec,
+    )
+    refilledAt = now
+    if (budget < 1) return next(new Error("You're doing that too fast."))
+    budget--
+    next()
+  })
+  socket.on("error", (err) => {
+    socket.emit("room:error", { message: err.message })
+  })
 
   function leaveCurrent(): void {
     const room = rooms.leaveRoom(socket.id)

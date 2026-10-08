@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react"
 
-import type { GameView, RoomActionResult, RoomState } from "@hosn-obe/shared"
+import {
+  OUTDATED_CLIENT_ERROR,
+  type GameView,
+  type RoomActionResult,
+  type RoomState,
+} from "@hosn-obe/shared"
 
 import { socketCommands } from "./commands.js"
 import { Game } from "./Game.js"
@@ -40,6 +45,7 @@ function useOnline(): boolean {
 export function App() {
   const [connected, setConnected] = useState(socket.connected)
   const [slow, setSlow] = useState(false)
+  const [outdated, setOutdated] = useState(false)
   const online = useOnline()
   const [muted, setMutedState] = useState(isMuted)
   const [screen, setScreen] = useState<Screen>("home")
@@ -74,6 +80,9 @@ export function App() {
     function onDisconnect() {
       setConnected(false)
     }
+    function onConnectError(err: Error) {
+      if (err.message === OUTDATED_CLIENT_ERROR) setOutdated(true)
+    }
     function onRoomState(next: RoomState) {
       setNotice(null)
       setRoom(next)
@@ -85,6 +94,7 @@ export function App() {
 
     socket.on("connect", onConnect)
     socket.on("disconnect", onDisconnect)
+    socket.on("connect_error", onConnectError)
     socket.on("room:state", onRoomState)
     socket.on("room:closed", onRoomClosed)
     socket.on("game:state", setGame)
@@ -92,6 +102,7 @@ export function App() {
     return () => {
       socket.off("connect", onConnect)
       socket.off("disconnect", onDisconnect)
+      socket.off("connect_error", onConnectError)
       socket.off("room:state", onRoomState)
       socket.off("room:closed", onRoomClosed)
       socket.off("game:state", setGame)
@@ -170,13 +181,15 @@ export function App() {
   const banner =
     practice || connected
       ? null
-      : !online
-        ? "No internet connection."
-        : `${room ? "Connection lost — reconnecting…" : "Can't reach the server — retrying…"}${
-            slow
-              ? " The server may be waking up; this can take up to a minute."
-              : ""
-          }`
+      : outdated
+        ? OUTDATED_CLIENT_ERROR
+        : !online
+          ? "No internet connection."
+          : `${room ? "Connection lost — reconnecting…" : "Can't reach the server — retrying…"}${
+              slow
+                ? " The server may be waking up; this can take up to a minute."
+                : ""
+            }`
 
   function toggleMute() {
     setMuted(!muted)
