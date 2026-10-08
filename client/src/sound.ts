@@ -1,6 +1,13 @@
 /** Short synthesized sound effects (Web Audio, no asset files). */
 
-export type Sound = "card" | "knock" | "turn" | "tick" | "layDown" | "lose" | "win"
+export type Sound =
+  | "card"
+  | "knock"
+  | "turn"
+  | "tick"
+  | "layDown"
+  | "lose"
+  | "win"
 
 const MUTE_KEY = "hosnobe.muted"
 

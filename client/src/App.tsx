@@ -173,7 +173,9 @@ export function App() {
       : !online
         ? "No internet connection."
         : `${room ? "Connection lost — reconnecting…" : "Can't reach the server — retrying…"}${
-            slow ? " The server may be waking up; this can take up to a minute." : ""
+            slow
+              ? " The server may be waking up; this can take up to a minute."
+              : ""
           }`
 
   function toggleMute() {

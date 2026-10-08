@@ -13,25 +13,25 @@ import {
   type GameView,
   type RoomPlayer,
   type RoomState,
-} from "@hosn-obe/shared";
+} from "@hosn-obe/shared"
 
-import type { RoomCommands } from "./commands.js";
+import type { RoomCommands } from "./commands.js"
 
-export const PRACTICE_YOU_ID = "you";
-const BOT_THINK_MS = { min: 600, max: 1400 };
-const NEXT_ROUND_MS = 5000;
-const DEFAULT_SEATS = 4;
+export const PRACTICE_YOU_ID = "you"
+const BOT_THINK_MS = { min: 600, max: 1400 }
+const NEXT_ROUND_MS = 5000
+const DEFAULT_SEATS = 4
 
 export interface PracticeSnapshot {
-  room: RoomState;
-  view: GameView | null;
+  room: RoomState
+  view: GameView | null
 }
 
 /** Offline table of you plus bots, run on this device by the shared game engine. */
 export class PracticeTable implements RoomCommands {
-  private readonly room: RoomState;
-  private game: GameState | null = null;
-  private timer: ReturnType<typeof setTimeout> | null = null;
+  private readonly room: RoomState
+  private game: GameState | null = null
+  private timer: ReturnType<typeof setTimeout> | null = null
 
   constructor(
     name: string,
@@ -42,24 +42,37 @@ export class PracticeTable implements RoomCommands {
       hostId: PRACTICE_YOU_ID,
       maxPlayers: DEFAULT_SEATS,
       seats: [
-        { id: PRACTICE_YOU_ID, name, isHost: true, isBot: false, ready: true, connected: true },
+        {
+          id: PRACTICE_YOU_ID,
+          name,
+          isHost: true,
+          isBot: false,
+          ready: true,
+          connected: true,
+        },
       ],
       spectators: [],
       phase: "lobby",
-    };
-    for (let i = 1; i < DEFAULT_SEATS; i++) this.room.seats.push(this.newBot("normal"));
+    }
+    for (let i = 1; i < DEFAULT_SEATS; i++)
+      this.room.seats.push(this.newBot("normal"))
   }
 
   snapshot(): PracticeSnapshot {
-    const game = this.game;
+    const game = this.game
     return {
       room: { ...this.room, seats: this.room.seats.map((p) => p && { ...p }) },
-      view: game ? viewFor(game, game.players.findIndex((p) => p.id === PRACTICE_YOU_ID)) : null,
-    };
+      view: game
+        ? viewFor(
+            game,
+            game.players.findIndex((p) => p.id === PRACTICE_YOU_ID),
+          )
+        : null,
+    }
   }
 
   dispose(): void {
-    this.clearTimer();
+    this.clearTimer()
   }
 
   setReady(): void {}
@@ -68,125 +81,146 @@ export class PracticeTable implements RoomCommands {
 
   setMaxPlayers(maxPlayers: number): void {
     this.inLobby(() => {
-      if (maxPlayers < seatedPlayers(this.room).length || maxPlayers > ROOM_LIMITS.maxPlayers) return;
-      this.room.maxPlayers = maxPlayers;
-      this.compact();
-    });
+      if (
+        maxPlayers < seatedPlayers(this.room).length ||
+        maxPlayers > ROOM_LIMITS.maxPlayers
+      )
+        return
+      this.room.maxPlayers = maxPlayers
+      this.compact()
+    })
   }
 
   addBot(seatIdx: number, level: BotLevel): void {
     this.inLobby(() => {
-      if (seatIdx >= this.room.maxPlayers || this.room.seats[seatIdx]) return;
-      this.room.seats[seatIdx] = this.newBot(level);
-      this.compact();
-    });
+      if (seatIdx >= this.room.maxPlayers || this.room.seats[seatIdx]) return
+      this.room.seats[seatIdx] = this.newBot(level)
+      this.compact()
+    })
   }
 
   removeBot(seatIdx: number): void {
     this.inLobby(() => {
-      if (!this.room.seats[seatIdx]?.isBot) return;
-      this.room.seats[seatIdx] = null;
-      this.compact();
-    });
+      if (!this.room.seats[seatIdx]?.isBot) return
+      this.room.seats[seatIdx] = null
+      this.compact()
+    })
   }
 
   setBotLevel(seatIdx: number, level: BotLevel): void {
     this.inLobby(() => {
-      const bot = this.room.seats[seatIdx];
-      if (bot?.isBot) bot.botLevel = level;
-    });
+      const bot = this.room.seats[seatIdx]
+      if (bot?.isBot) bot.botLevel = level
+    })
   }
 
   start(): void {
     this.inLobby(() => {
-      const seated = seatedPlayers(this.room);
-      if (seated.length < ROOM_LIMITS.minPlayers) return;
+      const seated = seatedPlayers(this.room)
+      if (seated.length < ROOM_LIMITS.minPlayers) return
       this.game = createGame(
         seated.map(({ id, name, isBot, botLevel }) =>
           botLevel ? { id, name, isBot, botLevel } : { id, name, isBot },
         ),
-      );
-      this.room.phase = "playing";
-    });
+      )
+      this.room.phase = "playing"
+    })
   }
 
   returnToLobby(): void {
-    this.clearTimer();
-    this.game = null;
-    this.room.phase = "lobby";
-    this.changed();
+    this.clearTimer()
+    this.game = null
+    this.room.phase = "lobby"
+    this.changed()
   }
 
   act(action: GameAction): void {
-    const game = this.game;
-    if (!game) return;
+    const game = this.game
+    if (!game) return
     try {
-      applyAction(game, game.players.findIndex((p) => p.id === PRACTICE_YOU_ID), action);
+      applyAction(
+        game,
+        game.players.findIndex((p) => p.id === PRACTICE_YOU_ID),
+        action,
+      )
     } catch (err) {
-      if (!(err instanceof GameError)) throw err;
-      return;
+      if (!(err instanceof GameError)) throw err
+      return
     }
-    this.changed();
+    this.changed()
   }
 
   private inLobby(op: () => void): void {
-    if (this.room.phase !== "lobby") return;
-    op();
-    this.changed();
+    if (this.room.phase !== "lobby") return
+    op()
+    this.changed()
   }
 
   private changed(): void {
-    this.schedule();
-    this.onChange(this.snapshot());
+    this.schedule()
+    this.onChange(this.snapshot())
   }
 
   /** Same pacing as the server: bots think for a moment, rounds pause before the next deal. */
   private schedule(): void {
-    this.clearTimer();
-    const game = this.game;
-    if (!game) return;
-    const current = game.players[game.turnIdx]!;
-    let delay: number;
-    let step: () => void;
+    this.clearTimer()
+    const game = this.game
+    if (!game) return
+    const current = game.players[game.turnIdx]!
+    let delay: number
+    let step: () => void
     if (game.phase === "roundEnd") {
-      delay = NEXT_ROUND_MS;
-      step = () => startRound(game);
-    } else if ((game.phase === "schieben" || game.phase === "play") && current.isBot) {
-      delay = BOT_THINK_MS.min + Math.random() * (BOT_THINK_MS.max - BOT_THINK_MS.min);
+      delay = NEXT_ROUND_MS
+      step = () => startRound(game)
+    } else if (
+      (game.phase === "schieben" || game.phase === "play") &&
+      current.isBot
+    ) {
+      delay =
+        BOT_THINK_MS.min + Math.random() * (BOT_THINK_MS.max - BOT_THINK_MS.min)
       step = () => {
-        const seat = game.turnIdx;
+        const seat = game.turnIdx
         try {
-          applyAction(game, seat, chooseBotAction(viewFor(game, seat), current.botLevel));
+          applyAction(
+            game,
+            seat,
+            chooseBotAction(viewFor(game, seat), current.botLevel),
+          )
         } catch (err) {
-          console.error("Bot move failed; falling back.", err);
-          applyAction(game, seat, { type: game.phase === "schieben" ? "KEEP" : "KNOCK" });
+          console.error("Bot move failed; falling back.", err)
+          applyAction(game, seat, {
+            type: game.phase === "schieben" ? "KEEP" : "KNOCK",
+          })
         }
-      };
+      }
     } else {
-      return;
+      return
     }
     this.timer = setTimeout(() => {
-      this.timer = null;
-      if (this.game !== game) return;
-      step();
-      this.changed();
-    }, delay);
+      this.timer = null
+      if (this.game !== game) return
+      step()
+      this.changed()
+    }, delay)
   }
 
   private clearTimer(): void {
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = null;
+    if (this.timer) clearTimeout(this.timer)
+    this.timer = null
   }
 
   private compact(): void {
-    const seated = seatedPlayers(this.room);
-    this.room.seats = [...seated, ...Array<null>(this.room.maxPlayers - seated.length).fill(null)];
+    const seated = seatedPlayers(this.room)
+    this.room.seats = [
+      ...seated,
+      ...Array<null>(this.room.maxPlayers - seated.length).fill(null),
+    ]
   }
 
   private newBot(botLevel: BotLevel): RoomPlayer {
-    const taken = new Set(seatedPlayers(this.room).map((p) => p.name));
-    let n = 1;
-    while (taken.has(`Bot ${n}`)) n++;
+    const taken = new Set(seatedPlayers(this.room).map((p) => p.name))
+    let n = 1
+    while (taken.has(`Bot ${n}`)) n++
     return {
       id: `bot:${n}:${Math.random().toString(36).slice(2)}`,
       name: `Bot ${n}`,
@@ -195,6 +229,6 @@ export class PracticeTable implements RoomCommands {
       botLevel,
       ready: true,
       connected: true,
-    };
+    }
   }
 }

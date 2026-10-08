@@ -111,9 +111,10 @@ function resultText(view: GameView): string {
 function opponentsInOrder(view: GameView): { seat: number; k: number }[] {
   const n = view.players.length
   const first = Math.max(view.you, 0)
-  return Array.from({ length: n }, (_, k) => ({ seat: (first + k) % n, k })).filter(
-    ({ seat }) => seat !== view.you,
-  )
+  return Array.from({ length: n }, (_, k) => ({
+    seat: (first + k) % n,
+    k,
+  })).filter(({ seat }) => seat !== view.you)
 }
 
 /** Rim position (-1..1 per axis) for the k-th seat after yours; k=0 is you at the bottom, clockwise. */
@@ -219,8 +220,7 @@ export function Game({
 
   // The server sends time left, not a timestamp, so device clock skew doesn't matter.
   const deadline = useMemo(
-    () =>
-      view.turnMsLeft === undefined ? null : Date.now() + view.turnMsLeft,
+    () => (view.turnMsLeft === undefined ? null : Date.now() + view.turnMsLeft),
     [view],
   )
   const msLeft = useCountdown(connected ? deadline : null)
@@ -380,98 +380,98 @@ export function Game({
       </div>
 
       <div className="game-side">
-      <p className="game-status" aria-live="polite">
-        {prompt(
-          view,
-          yourTurn,
-          offline.has(view.players[view.turnIdx]?.id ?? ""),
-        )}
-        {yourTurn && secsLeft !== null && ` (${secsLeft}s)`}
-      </p>
-      {msLeft !== null && (
-        <div
-          className={`turn-timer ${secsLeft! <= 5 ? "turn-timer--low" : ""}`}
-          aria-hidden="true">
-          <span
-            style={{
-              width: `${Math.min(100, (msLeft / ROOM_LIMITS.turnMs) * 100)}%`,
-            }}
-          />
-        </div>
-      )}
-
-      <p className="game-log">
-        {showdown ? resultText(view) : describeEvent(view, ev)}
-      </p>
-
-      {me && (
-        <div className={`you ${yourTurn ? "you--turn" : ""}`}>
-          <div className="card-row">
-            {me.hand.map((c, i) => (
-              <CardView
-                key={`${view.seq}-${i}`}
-                card={c}
-                flash={flashHand(view.you, i)}
-                selected={allSel !== null || handSel === i}
-                label={`Your card ${i + 1}`}
-                onClick={
-                  canPlay
-                    ? () => {
-                        setAllSel(null)
-                        setHandSel(handSel === i ? null : i)
-                      }
-                    : undefined
-                }
-              />
-            ))}
+        <p className="game-status" aria-live="polite">
+          {prompt(
+            view,
+            yourTurn,
+            offline.has(view.players[view.turnIdx]?.id ?? ""),
+          )}
+          {yourTurn && secsLeft !== null && ` (${secsLeft}s)`}
+        </p>
+        {msLeft !== null && (
+          <div
+            className={`turn-timer ${secsLeft! <= 5 ? "turn-timer--low" : ""}`}
+            aria-hidden="true">
+            <span
+              style={{
+                width: `${Math.min(100, (msLeft / ROOM_LIMITS.turnMs) * 100)}%`,
+              }}
+            />
           </div>
-        </div>
-      )}
+        )}
 
-      {yourTurn && view.phase === "schieben" && (
-        <div className="row">
-          <button className="secondary" onClick={() => act({ type: "KEEP" })}>
-            Keep
-          </button>
-          <button onClick={() => act({ type: "PUSH" })}>Push</button>
-        </div>
-      )}
+        <p className="game-log">
+          {showdown ? resultText(view) : describeEvent(view, ev)}
+        </p>
 
-      {canPlay && (
-        <div className="row">
-          <button
-            disabled={!allSel && (handSel === null || !poolSel)}
-            onClick={swap}>
-            Swap
-          </button>
-          {canLayDown ? (
-            <button
-              className="laydown"
-              onClick={() => act({ type: "LAY_DOWN" })}>
-              Lay down!
+        {me && (
+          <div className={`you ${yourTurn ? "you--turn" : ""}`}>
+            <div className="card-row">
+              {me.hand.map((c, i) => (
+                <CardView
+                  key={`${view.seq}-${i}`}
+                  card={c}
+                  flash={flashHand(view.you, i)}
+                  selected={allSel !== null || handSel === i}
+                  label={`Your card ${i + 1}`}
+                  onClick={
+                    canPlay
+                      ? () => {
+                          setAllSel(null)
+                          setHandSel(handSel === i ? null : i)
+                        }
+                      : undefined
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {yourTurn && view.phase === "schieben" && (
+          <div className="row">
+            <button className="secondary" onClick={() => act({ type: "KEEP" })}>
+              Keep
             </button>
-          ) : (
-            <button className="danger" onClick={() => act({ type: "KNOCK" })}>
-              {view.knockerIdx === null ? "Knock" : "Stand"}
+            <button onClick={() => act({ type: "PUSH" })}>Push</button>
+          </div>
+        )}
+
+        {canPlay && (
+          <div className="row">
+            <button
+              disabled={!allSel && (handSel === null || !poolSel)}
+              onClick={swap}>
+              Swap
+            </button>
+            {canLayDown ? (
+              <button
+                className="laydown"
+                onClick={() => act({ type: "LAY_DOWN" })}>
+                Lay down!
+              </button>
+            ) : (
+              <button className="danger" onClick={() => act({ type: "KNOCK" })}>
+                {view.knockerIdx === null ? "Knock" : "Stand"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {error && <p className="error">{error}</p>}
+
+        <div className="row row--spaced">
+          {isHost && (
+            <button
+              className="secondary"
+              onClick={() => commands.returnToLobby()}>
+              {view.phase === "gameEnd" ? "Back to lobby" : "End game"}
             </button>
           )}
-        </div>
-      )}
-
-      {error && <p className="error">{error}</p>}
-
-      <div className="row row--spaced">
-        {isHost && (
-          <button
-            className="secondary"
-            onClick={() => commands.returnToLobby()}>
-            {view.phase === "gameEnd" ? "Back to lobby" : "End game"}
+          <button className="secondary" onClick={onLeave}>
+            Leave
           </button>
-        )}
-        <button className="secondary" onClick={onLeave}>
-          Leave
-        </button>
-      </div>
+        </div>
       </div>
     </div>
   )

@@ -7,17 +7,17 @@
  * -> after a knock everyone else gets one last turn -> showdown.
  */
 
-import { buildDeck, DECK_SIZE, shuffle } from "./deck.js";
-import type { BotLevel } from "./net.js";
-import { handScore, isInstantWin } from "./scoring.js";
-import type { Card, Rng } from "./types.js";
+import { buildDeck, DECK_SIZE, shuffle } from "./deck.js"
+import type { BotLevel } from "./net.js"
+import { handScore, isInstantWin } from "./scoring.js"
+import type { Card, Rng } from "./types.js"
 
-export const HAND_SIZE = 3;
+export const HAND_SIZE = 3
 /** 0 lives = "swimming"; losing again after that knocks you out. */
-export const START_LIVES = 3;
+export const START_LIVES = 3
 
-export type PoolName = "up" | "down";
-export type GamePhase = "schieben" | "play" | "roundEnd" | "gameEnd";
+export type PoolName = "up" | "down"
+export type GamePhase = "schieben" | "play" | "roundEnd" | "gameEnd"
 
 export type GameAction =
   | { type: "KEEP" }
@@ -26,63 +26,74 @@ export type GameAction =
   | { type: "SWAP_ALL"; pool: PoolName }
   /** Knock; once someone else has knocked this means "stand". */
   | { type: "KNOCK" }
-  | { type: "LAY_DOWN" };
+  | { type: "LAY_DOWN" }
 
 export type GameEvent =
   | { type: "deal" }
   | { type: "keep" | "push" | "knock" | "stand" | "layDown"; seat: number }
-  | { type: "swap"; seat: number; pool: PoolName; handIdx: number; poolIdx: number }
-  | { type: "swapAll"; seat: number; pool: PoolName };
+  | {
+      type: "swap"
+      seat: number
+      pool: PoolName
+      handIdx: number
+      poolIdx: number
+    }
+  | { type: "swapAll"; seat: number; pool: PoolName }
 
 export interface RoundResult {
-  reason: "showdown" | "layDown";
+  reason: "showdown" | "layDown"
   /** Per seat; `null` for players who were already out. */
-  scores: (number | null)[];
-  losers: number[];
-  eliminated: number[];
+  scores: (number | null)[]
+  losers: number[]
+  eliminated: number[]
 }
 
 export interface GamePlayer {
-  id: string;
-  name: string;
-  isBot: boolean;
-  botLevel?: BotLevel;
-  lives: number;
-  out: boolean;
-  hand: Card[];
+  id: string
+  name: string
+  isBot: boolean
+  botLevel?: BotLevel
+  lives: number
+  out: boolean
+  hand: Card[]
   /** Face-up cards taken this round, one group per move (public: everyone saw them). */
-  takenUp: Card[][];
+  takenUp: Card[][]
   /** Face-down swaps this round. */
-  gambles: number;
+  gambles: number
 }
 
 export interface GameState {
-  players: GamePlayer[];
-  deck: Card[];
-  poolUp: Card[];
-  poolDown: Card[];
-  phase: GamePhase;
-  round: number;
-  startingIdx: number;
-  turnIdx: number;
-  knockerIdx: number | null;
+  players: GamePlayer[]
+  deck: Card[]
+  poolUp: Card[]
+  poolDown: Card[]
+  phase: GamePhase
+  round: number
+  startingIdx: number
+  turnIdx: number
+  knockerIdx: number | null
   /** Bumped on every event so clients can re-trigger animations. */
-  seq: number;
-  lastEvent: GameEvent;
-  result: RoundResult | null;
-  winnerIdx: number | null;
+  seq: number
+  lastEvent: GameEvent
+  result: RoundResult | null
+  winnerIdx: number | null
 }
 
 /** A rejected game action; the message is safe to show to the user. */
 export class GameError extends Error {}
 
-export const MAX_GAME_PLAYERS = Math.floor((DECK_SIZE - 2 * HAND_SIZE) / HAND_SIZE);
+export const MAX_GAME_PLAYERS = Math.floor(
+  (DECK_SIZE - 2 * HAND_SIZE) / HAND_SIZE,
+)
 
-export type GameSeat = Pick<GamePlayer, "id" | "name" | "isBot" | "botLevel">;
+export type GameSeat = Pick<GamePlayer, "id" | "name" | "isBot" | "botLevel">
 
-export function createGame(seats: readonly GameSeat[], rng: Rng = Math.random): GameState {
+export function createGame(
+  seats: readonly GameSeat[],
+  rng: Rng = Math.random,
+): GameState {
   if (seats.length < 2 || seats.length > MAX_GAME_PLAYERS) {
-    throw new GameError(`Games need 2–${MAX_GAME_PLAYERS} players.`);
+    throw new GameError(`Games need 2–${MAX_GAME_PLAYERS} players.`)
   }
   const state: GameState = {
     players: seats.map((s) => ({
@@ -106,131 +117,142 @@ export function createGame(seats: readonly GameSeat[], rng: Rng = Math.random): 
     lastEvent: { type: "deal" },
     result: null,
     winnerIdx: null,
-  };
-  startRound(state, rng);
-  return state;
+  }
+  startRound(state, rng)
+  return state
 }
 
 export function startRound(state: GameState, rng: Rng = Math.random): void {
-  if (state.phase !== "roundEnd") throw new GameError("The round is still running.");
-  const deck = shuffle(buildDeck(), rng);
+  if (state.phase !== "roundEnd")
+    throw new GameError("The round is still running.")
+  const deck = shuffle(buildDeck(), rng)
   for (const p of state.players) {
-    p.hand = p.out ? [] : deck.splice(0, HAND_SIZE);
-    p.takenUp = [];
-    p.gambles = 0;
+    p.hand = p.out ? [] : deck.splice(0, HAND_SIZE)
+    p.takenUp = []
+    p.gambles = 0
   }
-  state.poolUp = deck.splice(0, HAND_SIZE);
-  state.poolDown = deck.splice(0, HAND_SIZE);
-  state.deck = deck;
-  state.round++;
-  state.startingIdx = nextAlive(state, state.startingIdx);
-  state.turnIdx = state.startingIdx;
-  state.knockerIdx = null;
-  state.result = null;
-  state.phase = "schieben";
-  emit(state, { type: "deal" });
+  state.poolUp = deck.splice(0, HAND_SIZE)
+  state.poolDown = deck.splice(0, HAND_SIZE)
+  state.deck = deck
+  state.round++
+  state.startingIdx = nextAlive(state, state.startingIdx)
+  state.turnIdx = state.startingIdx
+  state.knockerIdx = null
+  state.result = null
+  state.phase = "schieben"
+  emit(state, { type: "deal" })
 }
 
 /** Apply `seat`'s (untrusted) action, mutating `state`. Throws `GameError` if illegal. */
-export function applyAction(state: GameState, seat: number, action: GameAction): void {
+export function applyAction(
+  state: GameState,
+  seat: number,
+  action: GameAction,
+): void {
   if (state.phase !== "schieben" && state.phase !== "play") {
-    throw new GameError("The round is over.");
+    throw new GameError("The round is over.")
   }
-  if (seat !== state.turnIdx) throw new GameError("It's not your turn.");
-  if (!action || typeof action !== "object") throw new GameError("Unknown action.");
-  const player = state.players[seat]!;
+  if (seat !== state.turnIdx) throw new GameError("It's not your turn.")
+  if (!action || typeof action !== "object")
+    throw new GameError("Unknown action.")
+  const player = state.players[seat]!
 
   if (state.phase === "schieben") {
     if (action.type === "PUSH") {
-      [player.hand, state.poolUp] = [state.poolUp, player.hand];
+      ;[player.hand, state.poolUp] = [state.poolUp, player.hand]
     } else if (action.type !== "KEEP") {
-      throw new GameError("Keep or push first.");
+      throw new GameError("Keep or push first.")
     }
-    emit(state, { type: action.type === "PUSH" ? "push" : "keep", seat });
-    state.phase = "play";
+    emit(state, { type: action.type === "PUSH" ? "push" : "keep", seat })
+    state.phase = "play"
     // Feuer: an opening 31/33 keeps the turn so the opener can lay down at once.
-    if (!isInstantWin(player.hand)) state.turnIdx = nextAlive(state, seat);
-    return;
+    if (!isInstantWin(player.hand)) state.turnIdx = nextAlive(state, seat)
+    return
   }
 
   switch (action.type) {
     case "LAY_DOWN":
       if (!isInstantWin(player.hand)) {
-        throw new GameError("You need 31 or three aces to lay down.");
+        throw new GameError("You need 31 or three aces to lay down.")
       }
-      emit(state, { type: "layDown", seat });
-      endRound(state, seat);
-      return;
+      emit(state, { type: "layDown", seat })
+      endRound(state, seat)
+      return
     case "KNOCK":
       if (state.knockerIdx === null) {
-        state.knockerIdx = seat;
-        emit(state, { type: "knock", seat });
+        state.knockerIdx = seat
+        emit(state, { type: "knock", seat })
       } else {
-        emit(state, { type: "stand", seat });
+        emit(state, { type: "stand", seat })
       }
-      break;
+      break
     case "SWAP": {
-      const pool = poolCards(state, action.pool);
-      const { handIdx, poolIdx } = action;
-      if (!isCardIndex(handIdx) || !isCardIndex(poolIdx)) throw new GameError("Invalid card.");
-      noteTaken(player, action.pool, [pool[poolIdx]!]);
-      [player.hand[handIdx], pool[poolIdx]] = [pool[poolIdx]!, player.hand[handIdx]!];
-      emit(state, { type: "swap", seat, pool: action.pool, handIdx, poolIdx });
-      break;
+      const pool = poolCards(state, action.pool)
+      const { handIdx, poolIdx } = action
+      if (!isCardIndex(handIdx) || !isCardIndex(poolIdx))
+        throw new GameError("Invalid card.")
+      noteTaken(player, action.pool, [pool[poolIdx]!])
+      ;[player.hand[handIdx], pool[poolIdx]] = [
+        pool[poolIdx]!,
+        player.hand[handIdx]!,
+      ]
+      emit(state, { type: "swap", seat, pool: action.pool, handIdx, poolIdx })
+      break
     }
     case "SWAP_ALL": {
-      const pool = poolCards(state, action.pool);
-      const taken = pool.splice(0, HAND_SIZE, ...player.hand);
-      noteTaken(player, action.pool, taken);
-      player.hand = taken;
-      emit(state, { type: "swapAll", seat, pool: action.pool });
-      break;
+      const pool = poolCards(state, action.pool)
+      const taken = pool.splice(0, HAND_SIZE, ...player.hand)
+      noteTaken(player, action.pool, taken)
+      player.hand = taken
+      emit(state, { type: "swapAll", seat, pool: action.pool })
+      break
     }
     default:
-      throw new GameError("Unknown action.");
+      throw new GameError("Unknown action.")
   }
-  advanceTurn(state);
+  advanceTurn(state)
 }
 
 /** What one seat may see: own hand (mostly), face-up pool (after the opening), and all hands at showdown. */
 export interface GameView {
   /** Your seat index, or -1 for a spectator. */
-  you: number;
-  players: PlayerView[];
+  you: number
+  players: PlayerView[]
   /** `null` entries are face-down. */
-  poolUp: (Card | null)[];
-  poolDown: null[];
-  phase: GamePhase;
-  round: number;
-  startingIdx: number;
-  turnIdx: number;
-  knockerIdx: number | null;
-  seq: number;
-  lastEvent: GameEvent;
-  result: RoundResult | null;
-  winnerIdx: number | null;
+  poolUp: (Card | null)[]
+  poolDown: null[]
+  phase: GamePhase
+  round: number
+  startingIdx: number
+  turnIdx: number
+  knockerIdx: number | null
+  seq: number
+  lastEvent: GameEvent
+  result: RoundResult | null
+  winnerIdx: number | null
   /** Set by the server: ms until the current turn is auto-played. */
-  turnMsLeft?: number;
+  turnMsLeft?: number
 }
 
 export interface PlayerView extends Omit<GamePlayer, "hand"> {
   /** `null` entries are face-down. */
-  hand: (Card | null)[];
+  hand: (Card | null)[]
 }
 
 export function viewFor(state: GameState, seat: number): GameView {
-  const showdown = state.phase === "roundEnd" || state.phase === "gameEnd";
-  const opening = state.phase === "schieben";
+  const showdown = state.phase === "roundEnd" || state.phase === "gameEnd"
+  const opening = state.phase === "schieben"
   return {
     you: seat,
     players: state.players.map(({ hand, takenUp, ...p }, i) => {
       // While someone else decides keep/push, your own cards are still face-down.
-      const visible = showdown || (i === seat && !(opening && seat !== state.turnIdx));
+      const visible =
+        showdown || (i === seat && !(opening && seat !== state.turnIdx))
       return {
         ...p,
         hand: hand.map((c) => (visible ? { ...c } : null)),
         takenUp: takenUp.map((move) => move.map((c) => ({ ...c }))),
-      };
+      }
     }),
     poolUp: state.poolUp.map((c) => (opening ? null : { ...c })),
     poolDown: state.poolDown.map(() => null),
@@ -248,69 +270,77 @@ export function viewFor(state: GameState, seat: number): GameView {
       eliminated: [...state.result.eliminated],
     },
     winnerIdx: state.winnerIdx,
-  };
+  }
 }
 
 /** Swap a seat over to bot control (e.g. a human left mid-game). */
-export function convertToBot(state: GameState, id: string, level: BotLevel): void {
-  const player = state.players.find((p) => p.id === id);
+export function convertToBot(
+  state: GameState,
+  id: string,
+  level: BotLevel,
+): void {
+  const player = state.players.find((p) => p.id === id)
   if (player) {
-    player.isBot = true;
-    player.botLevel = level;
+    player.isBot = true
+    player.botLevel = level
   }
 }
 
-function noteTaken(player: GamePlayer, pool: PoolName, cards: readonly Card[]): void {
-  if (pool === "up") player.takenUp.push(cards.map((c) => ({ ...c })));
-  else player.gambles++;
+function noteTaken(
+  player: GamePlayer,
+  pool: PoolName,
+  cards: readonly Card[],
+): void {
+  if (pool === "up") player.takenUp.push(cards.map((c) => ({ ...c })))
+  else player.gambles++
 }
 
 function emit(state: GameState, event: GameEvent): void {
-  state.lastEvent = event;
-  state.seq++;
+  state.lastEvent = event
+  state.seq++
 }
 
 function nextAlive(state: GameState, from: number): number {
-  const n = state.players.length;
+  const n = state.players.length
   for (let step = 1; step <= n; step++) {
-    const idx = (from + step) % n;
-    if (!state.players[idx]!.out) return idx;
+    const idx = (from + step) % n
+    if (!state.players[idx]!.out) return idx
   }
-  return from;
+  return from
 }
 
 function isCardIndex(i: unknown): i is number {
-  return typeof i === "number" && Number.isInteger(i) && i >= 0 && i < HAND_SIZE;
+  return typeof i === "number" && Number.isInteger(i) && i >= 0 && i < HAND_SIZE
 }
 
 function poolCards(state: GameState, pool: unknown): Card[] {
-  if (pool === "up") return state.poolUp;
-  if (pool === "down") return state.poolDown;
-  throw new GameError("Invalid pool.");
+  if (pool === "up") return state.poolUp
+  if (pool === "down") return state.poolDown
+  throw new GameError("Invalid pool.")
 }
 
 function advanceTurn(state: GameState): void {
-  state.turnIdx = nextAlive(state, state.turnIdx);
-  if (state.turnIdx === state.knockerIdx) endRound(state, null);
+  state.turnIdx = nextAlive(state, state.turnIdx)
+  if (state.turnIdx === state.knockerIdx) endRound(state, null)
 }
 
 /** Lowest hand loses a life (ties all lose; an all-way showdown tie costs nobody). */
 function endRound(state: GameState, layDownSeat: number | null): void {
-  const scores = state.players.map((p) => (p.out ? null : handScore(p.hand)));
+  const scores = state.players.map((p) => (p.out ? null : handScore(p.hand)))
   const contenders = state.players
     .map((_, i) => i)
-    .filter((i) => scores[i] !== null && i !== layDownSeat);
-  const low = Math.min(...contenders.map((i) => scores[i]!));
-  let losers = contenders.filter((i) => scores[i] === low);
-  if (layDownSeat === null && losers.length === contenders.length) losers = [];
+    .filter((i) => scores[i] !== null && i !== layDownSeat)
+  const low = Math.min(...contenders.map((i) => scores[i]!))
+  let losers = contenders.filter((i) => scores[i] === low)
+  if (layDownSeat === null && losers.length === contenders.length) losers = []
 
-  const eliminated: number[] = [];
+  const eliminated: number[] = []
   for (const i of losers) {
-    const p = state.players[i]!;
-    p.lives--;
+    const p = state.players[i]!
+    p.lives--
     if (p.lives < 0) {
-      p.out = true;
-      eliminated.push(i);
+      p.out = true
+      eliminated.push(i)
     }
   }
   state.result = {
@@ -318,13 +348,13 @@ function endRound(state: GameState, layDownSeat: number | null): void {
     scores,
     losers,
     eliminated,
-  };
+  }
 
-  const alive = state.players.flatMap((p, i) => (p.out ? [] : [i]));
+  const alive = state.players.flatMap((p, i) => (p.out ? [] : [i]))
   if (alive.length <= 1) {
-    state.phase = "gameEnd";
-    state.winnerIdx = alive[0] ?? null;
+    state.phase = "gameEnd"
+    state.winnerIdx = alive[0] ?? null
   } else {
-    state.phase = "roundEnd";
+    state.phase = "roundEnd"
   }
 }
