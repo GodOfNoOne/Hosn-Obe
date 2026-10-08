@@ -9,5 +9,9 @@ const url = import.meta.env.VITE_SERVER_URL ?? "http://localhost:3000"
 
 export const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(
   url,
-  { autoConnect: true },
+  {
+    autoConnect: true,
+    // Skips ngrok's free-tier browser warning page; ignored by other hosts.
+    extraHeaders: { "ngrok-skip-browser-warning": "1" },
+  },
 )
