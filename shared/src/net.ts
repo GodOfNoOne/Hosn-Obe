@@ -31,6 +31,8 @@ export interface RoomState {
   maxPlayers: number;
   /** Length is always `maxPlayers`; `null` marks an empty seat. */
   seats: (RoomPlayer | null)[];
+  /** Joined mid-game (or the table was full); they take free seats back in the lobby. */
+  spectators: RoomPlayer[];
   phase: RoomPhase;
 }
 
@@ -45,8 +47,11 @@ export const ROOM_LIMITS = {
   minPlayers: 2,
   // 32 cards: 3 per player plus the two 3-card table pools.
   maxPlayers: 8,
+  maxSpectators: 8,
   codeLength: 5,
   nameMaxLength: 20,
+  /** A human who doesn't move in time has a stand-in bot play for them. */
+  turnMs: 30_000,
 } as const;
 
 export function seatedPlayers(room: Pick<RoomState, "seats">): RoomPlayer[] {

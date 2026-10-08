@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AWAY_TURN_MS, RoomError, RoomManager } from "../src/rooms.js";
+import { AWAY_TURN_MS, RoomError, RoomManager, TURN_MS } from "../src/rooms.js";
 
 function ok<T extends { ok: boolean }>(r: T): Extract<T, { ok: true }> {
   if (!r.ok) throw new Error(JSON.stringify(r));
@@ -102,11 +102,36 @@ describe("RoomManager lobby", () => {
     rooms.start("s-host");
     expect(room().phase).toBe("playing");
     expect(rooms.getGame(code)?.players.map((p) => p.name)).toEqual(["Alice", "Bob"]);
-    expect(rooms.joinRoom("s-carol", code, "Carol")).toMatchObject({ ok: false });
     rooms.returnToLobby("s-host");
     expect(room().phase).toBe("lobby");
     expect(rooms.getGame(code)).toBeNull();
     expect(room().seats[1]?.ready).toBe(false);
+  });
+
+  it("lets people join a running game as spectators and seats them back in the lobby", () => {
+    const { rooms, code, room } = setup(3);
+    rooms.joinRoom("s-bob", code, "Bob");
+    rooms.setReady("s-bob", true);
+    rooms.start("s-host");
+    const carol = ok(rooms.joinRoom("s-carol", code, "Carol"));
+    ok(rooms.joinRoom("s-dave", code, "Dave"));
+    expect(room().spectators.map((p) => p.name)).toEqual(["Carol", "Dave"]);
+    expect(rooms.getGame(code)?.players).toHaveLength(2);
+
+    const views = new Map(rooms.gameViews(code));
+    expect(views.get("s-carol")?.you).toBe(-1);
+    expect(views.get("s-carol")?.players.every((p) => p.hand.every((c) => c === null))).toBe(true);
+    expect(() => rooms.gameAction("s-carol", { type: "KEEP" })).toThrow("not in a game");
+
+    rooms.disconnect("s-carol");
+    expect(rooms.resume("s-carol2", carol.token).result.ok).toBe(true);
+
+    rooms.returnToLobby("s-host");
+    expect(room().seats.map((p) => p?.name)).toEqual(["Alice", "Bob", "Carol"]);
+    expect(room().spectators.map((p) => p.name)).toEqual(["Dave"]);
+    rooms.leaveRoom("s-bob");
+    expect(room().seats.map((p) => p?.name)).toEqual(["Alice", "Carol", "Dave"]);
+    expect(room().spectators).toEqual([]);
   });
 
   it("kicks humans but not the host or bots", () => {
@@ -294,11 +319,35 @@ describe("RoomManager gameplay", () => {
     expect(game().seq).toBe(seq + 1);
     expect(game().players[1]!.isBot).toBe(false);
 
-    // Back online before their next turn: no stand-in.
+    // Back online before their next turn: the normal turn time applies.
     rooms.resume("s-bob2", bob.token);
     rooms.gameAction("s-host", { type: "KNOCK" });
     rooms.schedule(code, onStep);
-    vi.advanceTimersByTime(AWAY_TURN_MS * 2);
+    vi.advanceTimersByTime(TURN_MS - 1);
     expect(game()).toMatchObject({ phase: "play", turnIdx: 1, seq: seq + 2 });
+  });
+
+  it("plays a slow human's turn after the turn time, without re-arming on every sync", () => {
+    vi.useFakeTimers();
+    const { rooms, code, host, game } = started();
+    const onStep = vi.fn((c: string) => rooms.schedule(c, onStep));
+    rooms.schedule(code, onStep);
+    const seq = game().seq;
+    expect(rooms.gameViews(code)[0]![1].turnMsLeft).toBe(TURN_MS);
+
+    vi.advanceTimersByTime(TURN_MS / 2);
+    rooms.schedule(code, onStep);
+    expect(rooms.gameViews(code)[0]![1].turnMsLeft).toBe(TURN_MS / 2);
+
+    // Dropping and reconnecting never extends the deadline.
+    rooms.disconnect("s-host");
+    rooms.schedule(code, onStep);
+    rooms.resume("s-host2", host.token);
+    rooms.schedule(code, onStep);
+    vi.advanceTimersByTime(TURN_MS / 2 - 1);
+    expect(game().seq).toBe(seq);
+    vi.advanceTimersByTime(1);
+    expect(game().seq).toBe(seq + 1);
+    expect(game().phase).toBe("play");
   });
 });

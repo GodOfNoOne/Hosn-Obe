@@ -62,6 +62,22 @@ body {
   background: rgba(140, 160, 255, 0.2);
   color: #8ca0ff;
 }
+.topbar .mute {
+  margin-left: auto;
+  font-size: 1.1rem;
+}
+.mute + .status {
+  margin-left: 8px;
+}
+.offline-banner {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 107, 107, 0.15);
+  color: var(--error);
+  font-size: 0.9rem;
+  text-align: center;
+}
 
 .panel {
   background: var(--panel);
@@ -339,6 +355,30 @@ select {
   color: var(--gold);
   font-weight: 600;
   min-height: 1.3em;
+}
+
+/* Portrait: the side column dissolves so status sits above the table. */
+.game-side {
+  display: contents;
+}
+.game-status,
+.turn-timer {
+  order: -1;
+}
+.turn-timer {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.turn-timer span {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+  transition: width 0.25s linear;
+}
+.turn-timer--low span {
+  background: var(--error);
 }
 .game-log {
   margin: 0;
@@ -672,4 +712,61 @@ button.menu-btn--plain {
   color: var(--text);
   border: 1px solid #2b3153;
   box-shadow: none;
+}
+
+/* Phones held sideways: table on the left, status and controls on the right. */
+@media (orientation: landscape) and (max-height: 540px) {
+  .app {
+    max-width: 980px;
+    padding-bottom: calc(
+      8px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))
+    );
+  }
+  .topbar {
+    padding: 6px 0;
+  }
+  .topbar h1 {
+    font-size: 1.1rem;
+  }
+  .panel {
+    max-width: 520px;
+    margin: 0 auto;
+  }
+  .hero {
+    padding: 8px 0 16px;
+  }
+  .game {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .table,
+  .table--large {
+    flex: 1;
+    height: max(
+      280px,
+      calc(
+        100dvh - 64px -
+          var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) -
+          var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))
+      )
+    );
+  }
+  .game-side {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: min(320px, 40%);
+  }
+  .felt {
+    flex-direction: row;
+    gap: 18px;
+  }
+  .felt .card {
+    width: min(48px, 7cqw);
+  }
+  .you .card {
+    width: 64px;
+    height: 92px;
+  }
 }

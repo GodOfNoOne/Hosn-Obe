@@ -42,15 +42,15 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 
 const rooms = new RoomManager()
 
-/** Push room + per-seat game state to everyone in the room, then arm bot/round timers. */
+/** Arm bot/turn/round timers, then push room + per-seat game state (with the turn countdown) to everyone. */
 function sync(code: string): void {
   const room = rooms.getRoom(code)
   if (!room) return
+  rooms.schedule(code, sync)
   io.to(code).emit("room:state", rooms.toState(room))
   for (const [socketId, view] of rooms.gameViews(code)) {
     io.to(socketId).emit("game:state", view)
   }
-  rooms.schedule(code, sync)
 }
 
 io.on("connection", (socket) => {

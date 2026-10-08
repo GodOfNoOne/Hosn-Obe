@@ -16,11 +16,32 @@ import { Room } from "./Room.js"
 import { clearToken, loadName, loadToken, saveToken } from "./session.js"
 import { Settings } from "./Settings.js"
 import { socket } from "./socket.js"
+import { isMuted, setMuted } from "./sound.js"
 
 type Screen = "home" | "online" | "settings"
 
+/** After this long without a connection, hint that a sleeping server may be waking up. */
+const SLOW_CONNECT_MS = 5000
+
+function useOnline(): boolean {
+  const [online, setOnline] = useState(navigator.onLine)
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine)
+    window.addEventListener("online", update)
+    window.addEventListener("offline", update)
+    return () => {
+      window.removeEventListener("online", update)
+      window.removeEventListener("offline", update)
+    }
+  }, [])
+  return online
+}
+
 export function App() {
   const [connected, setConnected] = useState(socket.connected)
+  const [slow, setSlow] = useState(false)
+  const online = useOnline()
+  const [muted, setMutedState] = useState(isMuted)
   const [screen, setScreen] = useState<Screen>("home")
   const [room, setRoom] = useState<RoomState | null>(null)
   const [game, setGame] = useState<GameView | null>(null)
@@ -80,6 +101,13 @@ export function App() {
   const atTable = practice !== null || room !== null
   useEffect(() => keepAwake(atTable), [atTable])
 
+  useEffect(() => {
+    setSlow(false)
+    if (connected) return
+    const id = setTimeout(() => setSlow(true), SLOW_CONNECT_MS)
+    return () => clearTimeout(id)
+  }, [connected])
+
   useEffect(
     () =>
       onResume(() => {
@@ -98,8 +126,9 @@ export function App() {
       )
         leavePractice()
     } else if (room) {
+      const seated = room.seats.some((p) => p?.id === youId)
       const question =
-        room.phase === "playing"
+        room.phase === "playing" && seated
           ? "Leave the game? A bot will take over your seat."
           : "Leave the room?"
       if (window.confirm(question)) handleLeave()
@@ -138,11 +167,32 @@ export function App() {
   }
 
   const home = !practice && !room && screen === "home"
+  const banner =
+    practice || connected
+      ? null
+      : !online
+        ? "No internet connection."
+        : `${room ? "Connection lost — reconnecting…" : "Can't reach the server — retrying…"}${
+            slow ? " The server may be waking up; this can take up to a minute." : ""
+          }`
+
+  function toggleMute() {
+    setMuted(!muted)
+    setMutedState(!muted)
+  }
 
   return (
     <div className="app">
       <header className="topbar">
         {!home && <h1>Hosn Obe</h1>}
+        <button
+          type="button"
+          className="btn-icon mute"
+          aria-label={muted ? "Turn sound on" : "Turn sound off"}
+          aria-pressed={muted}
+          onClick={toggleMute}>
+          {muted ? "🔇" : "🔊"}
+        </button>
         {practice ? (
           <span className="status status--practice">practice</span>
         ) : (
@@ -152,6 +202,12 @@ export function App() {
           </span>
         )}
       </header>
+
+      {banner && (
+        <p className="offline-banner" role="status">
+          {banner}
+        </p>
+      )}
 
       {practice && practiceSnap ? (
         practiceSnap.room.phase === "playing" && practiceSnap.view ? (
@@ -176,6 +232,7 @@ export function App() {
           view={game}
           room={room}
           isHost={room.hostId === youId}
+          connected={connected}
           commands={socketCommands}
           onLeave={handleLeave}
         />

@@ -77,6 +77,10 @@ export function Room({
         <p className="notice">Loading the table…</p>
       )}
 
+      {inLobby && !me && room.spectators.some((p) => p.id === youId) && (
+        <p className="notice">The table is full — you'll get a seat when one frees up.</p>
+      )}
+
       <ul className="players">
         {room.seats.map((p, seatIdx) =>
           p ? (
@@ -100,6 +104,12 @@ export function Room({
           ),
         )}
       </ul>
+
+      {room.spectators.length > 0 && (
+        <p className="hint hint--left">
+          Watching: {room.spectators.map((p) => (p.id === youId ? "you" : p.name)).join(", ")}
+        </p>
+      )}
 
       {inLobby && isHost && (
         <>

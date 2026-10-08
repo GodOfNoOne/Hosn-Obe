@@ -35,6 +35,7 @@ export class RoomError extends Error {}
 
 export const BOT_THINK_MS = { min: 600, max: 1400 }
 export const NEXT_ROUND_MS = 5000
+export const TURN_MS = ROOM_LIMITS.turnMs
 /** A disconnected human's turn is played by a stand-in bot after this long. */
 export const AWAY_TURN_MS = 15_000
 /** Skill of the stand-in for disconnected or departed humans. */
@@ -50,6 +51,10 @@ interface ServerRoom extends RoomState {
   members: Map<string, Member>
   game: GameState | null
   timer: ReturnType<typeof setTimeout> | null
+  /** What the armed timer is for, so a re-sync doesn't restart it. */
+  timerKey: string | null
+  /** When the human turn at game `seq` auto-plays (epoch ms). */
+  deadline: { seq: number; at: number } | null
 }
 
 interface Session {
@@ -97,12 +102,26 @@ function seatIndex(room: ServerRoom, raw: unknown): number {
 }
 
 function humans(room: ServerRoom): RoomPlayer[] {
-  return seatedPlayers(room).filter((p) => !p.isBot)
+  return [...seatedPlayers(room).filter((p) => !p.isBot), ...room.spectators]
 }
 
-/** Lobby seats behave like a stack: occupied seats first (in order), empty seats last. */
+function findPlayer(room: ServerRoom, id: string): RoomPlayer | undefined {
+  return (
+    room.seats.find((p) => p?.id === id) ??
+    room.spectators.find((p) => p.id === id)
+  )
+}
+
+/** Lobby seats behave like a stack: occupied seats first (in order), empty seats last; spectators fill free seats. */
 function compactSeats(room: ServerRoom): void {
   const seated = seatedPlayers(room)
+  while (
+    room.phase === "lobby" &&
+    seated.length < room.maxPlayers &&
+    room.spectators.length
+  ) {
+    seated.push(room.spectators.shift()!)
+  }
   room.seats = [
     ...seated,
     ...Array<null>(room.maxPlayers - seated.length).fill(null),
@@ -164,17 +183,21 @@ export class RoomManager {
       hostId: "",
       maxPlayers: size,
       seats: Array(size).fill(null),
+      spectators: [],
       phase: "lobby",
       members: new Map(),
       game: null,
       timer: null,
+      timerKey: null,
+      deadline: null,
     }
     this.rooms.set(code, room)
-    const result = this.seatHuman(room, 0, socketId, name)
+    const { player, result } = this.admit(room, socketId, name)
+    room.seats[0] = player
     room.hostId = result.youId
-    room.seats[0]!.isHost = true
-    room.seats[0]!.ready = true
-    log(code, `room created by ${q(room.seats[0]!.name)} (${size} seats)`)
+    player.isHost = true
+    player.ready = true
+    log(code, `room created by ${q(player.name)} (${size} seats)`)
     return result
   }
 
@@ -186,14 +209,24 @@ export class RoomManager {
     const code = typeof rawCode === "string" ? rawCode.trim().toUpperCase() : ""
     const room = this.rooms.get(code)
     if (!room) return { ok: false, error: "Room not found." }
-    if (room.phase !== "lobby")
-      return { ok: false, error: "Game already in progress." }
-    const seatIdx = room.seats.indexOf(null)
-    if (seatIdx === -1) return { ok: false, error: "Room is full." }
+    const seatIdx = room.phase === "lobby" ? room.seats.indexOf(null) : -1
+    if (room.phase === "lobby" && seatIdx === -1)
+      return { ok: false, error: "Room is full." }
+    if (
+      room.phase !== "lobby" &&
+      room.spectators.length >= ROOM_LIMITS.maxSpectators
+    )
+      return { ok: false, error: "Too many spectators already." }
 
     this.leaveRoom(socketId)
-    const result = this.seatHuman(room, seatIdx, socketId, name)
-    log(code, `${q(room.seats[seatIdx]!.name)} joined`)
+    const { player, result } = this.admit(room, socketId, name)
+    if (seatIdx === -1) {
+      room.spectators.push(player)
+      log(code, `${q(player.name)} joined as a spectator`)
+    } else {
+      room.seats[seatIdx] = player
+      log(code, `${q(player.name)} joined`)
+    }
     return result
   }
 
@@ -206,7 +239,7 @@ export class RoomManager {
       typeof rawToken === "string" ? this.tokens.get(rawToken) : undefined
     const room = session && this.rooms.get(session.code)
     const member = room?.members.get(session!.playerId)
-    const player = room?.seats.find((p) => p?.id === session!.playerId)
+    const player = room && findPlayer(room, session!.playerId)
     if (!session || !room || !member || !player) {
       return {
         result: { ok: false, error: "Your seat is no longer available." },
@@ -258,7 +291,7 @@ export class RoomManager {
     const member = room?.members.get(session.playerId)
     if (!room || !member) return null
     member.socketId = null
-    const player = room.seats.find((p) => p?.id === session.playerId)
+    const player = findPlayer(room, session.playerId)
     if (player) {
       player.connected = false
       log(room.code, `${q(player.name)} disconnected`)
@@ -380,6 +413,7 @@ export class RoomManager {
       ),
     )
     room.phase = "playing"
+    room.deadline = null
     const players = room.game.players.map((p) =>
       p.isBot ? `${q(p.name)} (${p.botLevel})` : q(p.name),
     )
@@ -394,6 +428,7 @@ export class RoomManager {
     room.game = null
     room.phase = "lobby"
     for (const p of seatedPlayers(room)) p.ready = p.isHost || p.isBot
+    compactSeats(room)
     log(room.code, "back to lobby")
     return room
   }
@@ -407,39 +442,61 @@ export class RoomManager {
   }
 
   /**
-   * Arm the room's single timer for whatever happens next without a human:
-   * a bot's move, a stand-in move for a disconnected human, or the next round.
-   * `onStep` runs after each automatic step.
+   * Arm the room's single timer for whatever happens next on its own: a bot's
+   * move, a stand-in move for a slow or disconnected human, or the next round.
+   * Re-syncs keep an already-armed timer. `onStep` runs after each automatic step.
    */
   schedule(code: string, onStep: (code: string) => void): void {
     const room = this.rooms.get(code)
     if (!room) return
-    this.clearTimer(room)
     const game = room.game
-    if (!game) return
+    if (!game) return this.clearTimer(room)
 
     const current = game.players[game.turnIdx]!
     const away =
       room.seats.find((p) => p?.id === current.id)?.connected === false
+    const live = game.phase === "schieben" || game.phase === "play"
+    const kind =
+      game.phase === "roundEnd"
+        ? "round"
+        : !live
+          ? null
+          : current.isBot
+            ? "bot"
+            : away
+              ? "away"
+              : "turn"
+    const key = `${game.seq}:${kind}`
+    if (room.timer && room.timerKey === key) return
+    this.clearTimer(room)
+    if (!kind) return
+
     let delay: number
     let step: () => void
-    if (game.phase === "roundEnd") {
+    if (kind === "round") {
       delay = NEXT_ROUND_MS
       step = () => {
         startRound(game)
         log(code, `round ${game.round} started`)
       }
-    } else if (
-      (game.phase === "schieben" || game.phase === "play") &&
-      (current.isBot || away)
-    ) {
-      const level = (current.isBot && current.botLevel) || STAND_IN_LEVEL
-      delay = current.isBot
-        ? BOT_THINK_MS.min +
+    } else {
+      if (kind === "bot") {
+        delay =
+          BOT_THINK_MS.min +
           Math.random() * (BOT_THINK_MS.max - BOT_THINK_MS.min)
-        : AWAY_TURN_MS
+      } else {
+        // Never extend a running deadline (e.g. by dropping and reconnecting).
+        const now = Date.now()
+        const prev =
+          room.deadline?.seq === game.seq ? room.deadline.at : Infinity
+        const at = Math.min(prev, now + (away ? AWAY_TURN_MS : TURN_MS))
+        room.deadline = { seq: game.seq, at }
+        delay = at - now
+      }
+      const level = (current.isBot && current.botLevel) || STAND_IN_LEVEL
       step = () => {
         const seat = game.turnIdx
+        if (kind === "turn") log(code, `${q(current.name)} ran out of time`)
         try {
           play(code, game, seat, chooseBotAction(viewFor(game, seat), level))
         } catch (err) {
@@ -449,28 +506,38 @@ export class RoomManager {
           })
         }
       }
-    } else {
-      return
     }
 
+    room.timerKey = key
     room.timer = setTimeout(() => {
       room.timer = null
+      room.timerKey = null
       if (this.rooms.get(code) !== room || room.game !== game) return
       step()
       onStep(code)
     }, delay)
   }
 
-  /** Each connected player's socket paired with their personalized view. */
+  /** Each connected player's and spectator's socket paired with their personalized view. */
   gameViews(code: string): [socketId: string, view: GameView][] {
     const room = this.rooms.get(code)
     const game = room?.game
     if (!room || !game) return []
-    return game.players.flatMap((p, seat) => {
-      const socketId = room.members.get(p.id)?.socketId
-      return socketId
-        ? [[socketId, viewFor(game, seat)] as [string, GameView]]
-        : []
+    const d = room.deadline
+    const turnMsLeft =
+      room.timer && d?.seq === game.seq
+        ? Math.max(0, d.at - Date.now())
+        : undefined
+    const viewers: [string, number][] = [
+      ...game.players.map((p, seat): [string, number] => [p.id, seat]),
+      ...room.spectators.map((p): [string, number] => [p.id, -1]),
+    ]
+    return viewers.flatMap(([id, seat]) => {
+      const socketId = room.members.get(id)?.socketId
+      if (!socketId) return []
+      const view = viewFor(game, seat)
+      if (turnMsLeft !== undefined) view.turnMsLeft = turnMsLeft
+      return [[socketId, view] as [string, GameView]]
     })
   }
 
@@ -488,19 +555,20 @@ export class RoomManager {
       hostId: room.hostId,
       maxPlayers: room.maxPlayers,
       seats: room.seats.map((p) => (p ? { ...p } : null)),
+      spectators: room.spectators.map((p) => ({ ...p })),
       phase: room.phase,
     }
   }
 
-  private seatHuman(
+  /** Register a new human member (not yet placed in a seat or the spectators). */
+  private admit(
     room: ServerRoom,
-    seatIdx: number,
     socketId: string,
     name: unknown,
-  ): RoomActionResult & { ok: true } {
+  ): { player: RoomPlayer; result: RoomActionResult & { ok: true } } {
     const id = randomUUID()
     const token = randomUUID()
-    room.seats[seatIdx] = {
+    const player: RoomPlayer = {
       id,
       name: sanitizeName(name),
       isHost: false,
@@ -512,7 +580,7 @@ export class RoomManager {
     const session = { code: room.code, playerId: id }
     this.sockets.set(socketId, session)
     this.tokens.set(token, session)
-    return { ok: true, code: room.code, youId: id, token }
+    return { player, result: { ok: true, code: room.code, youId: id, token } }
   }
 
   /** Free a human's seat (or hand it to a bot mid-game), promoting a new host if needed. */
@@ -540,6 +608,8 @@ export class RoomManager {
     } else if (idx !== -1) {
       room.seats[idx] = null
       compactSeats(room)
+    } else {
+      room.spectators = room.spectators.filter((p) => p.id !== playerId)
     }
 
     const remaining = humans(room)
@@ -567,12 +637,13 @@ export class RoomManager {
   }
 
   private playerName(room: ServerRoom, playerId: string): string {
-    return room.seats.find((p) => p?.id === playerId)?.name ?? "?"
+    return findPlayer(room, playerId)?.name ?? "?"
   }
 
   private clearTimer(room: ServerRoom): void {
     if (room.timer) clearTimeout(room.timer)
     room.timer = null
+    room.timerKey = null
   }
 
   private memberRoom(socketId: string): { room: ServerRoom; playerId: string } {

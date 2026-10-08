@@ -209,6 +209,8 @@ export interface GameView {
   lastEvent: GameEvent;
   result: RoundResult | null;
   winnerIdx: number | null;
+  /** Set by the server: ms until the current turn is auto-played. */
+  turnMsLeft?: number;
 }
 
 export interface PlayerView extends Omit<GamePlayer, "hand"> {

@@ -44,6 +44,7 @@ export class PracticeTable implements RoomCommands {
       seats: [
         { id: PRACTICE_YOU_ID, name, isHost: true, isBot: false, ready: true, connected: true },
       ],
+      spectators: [],
       phase: "lobby",
     };
     for (let i = 1; i < DEFAULT_SEATS; i++) this.room.seats.push(this.newBot("normal"));

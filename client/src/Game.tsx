@@ -1,7 +1,8 @@
-import { useEffect, useState, type CSSProperties } from "react"
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 
 import {
   isInstantWin,
+  ROOM_LIMITS,
   type Card,
   type GameAction,
   type GameEvent,
@@ -14,6 +15,7 @@ import {
 import { CardView, Lives } from "./Card.js"
 import type { RoomCommands } from "./commands.js"
 import { turnFeedback } from "./native.js"
+import { playSound, type Sound } from "./sound.js"
 import { useServerError } from "./useServerError.js"
 
 const POOL_LABEL: Record<PoolName, string> = {
@@ -62,12 +64,14 @@ function prompt(
   turnOffline: boolean,
 ): string {
   const turnName = nameOf(view, view.turnIdx)
+  const live = view.phase === "schieben" || view.phase === "play"
   if (view.players[view.you]?.out && view.phase !== "gameEnd") {
     return "You're out — watching the rest of the game."
   }
-  if (turnOffline && (view.phase === "schieben" || view.phase === "play")) {
+  if (turnOffline && live) {
     return `${turnName} is offline — a bot will move for them shortly…`
   }
+  if (view.you < 0 && live) return `Watching — ${turnName}'s turn…`
   if (view.phase === "schieben") {
     return yourTurn
       ? "Opening: keep your three cards, or push them for the hidden table set."
@@ -103,14 +107,13 @@ function resultText(view: GameView): string {
   return parts.join(" ")
 }
 
-/** Seats after yours, in turn order, so the table reads clockwise from you. */
-function opponentsInOrder(view: GameView): number[] {
+/** Every other seat with its rim slot, in turn order from yours (spectators: from seat 0 at the bottom). */
+function opponentsInOrder(view: GameView): { seat: number; k: number }[] {
   const n = view.players.length
-  const start = view.you >= 0 ? view.you : -1
-  return Array.from(
-    { length: n - 1 },
-    (_, k) => (start + 1 + k + n) % n,
-  ).filter((i) => i !== view.you)
+  const first = Math.max(view.you, 0)
+  return Array.from({ length: n }, (_, k) => ({ seat: (first + k) % n, k })).filter(
+    ({ seat }) => seat !== view.you,
+  )
 }
 
 /** Rim position (-1..1 per axis) for the k-th seat after yours; k=0 is you at the bottom, clockwise. */
@@ -126,16 +129,47 @@ function rimStyle(k: number, n: number): CSSProperties {
   }
 }
 
+/** Sound for the latest event, or for how the round ended for you. */
+function eventSound(view: GameView): Sound | null {
+  const r = view.result
+  if (view.phase === "gameEnd" && view.winnerIdx === view.you) return "win"
+  if (r && r.losers.includes(view.you)) return "lose"
+  switch (view.lastEvent.type) {
+    case "knock":
+      return "knock"
+    case "layDown":
+      return "layDown"
+    case "stand":
+      return null
+    default:
+      return "card"
+  }
+}
+
+/** Milliseconds left until `deadline` (epoch ms), updated a few times a second. */
+function useCountdown(deadline: number | null): number | null {
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    if (deadline === null) return
+    setNow(Date.now())
+    const id = setInterval(() => setNow(Date.now()), 250)
+    return () => clearInterval(id)
+  }, [deadline])
+  return deadline === null ? null : Math.max(0, deadline - now)
+}
+
 export function Game({
   view,
   room,
   isHost,
+  connected = true,
   commands,
   onLeave,
 }: {
   view: GameView
   room: RoomState
   isHost: boolean
+  connected?: boolean
   commands: RoomCommands
   onLeave: () => void
 }) {
@@ -169,8 +203,32 @@ export function Game({
   const ev = view.lastEvent
 
   useEffect(() => {
-    if (yourTurn) turnFeedback()
+    if (yourTurn) {
+      turnFeedback()
+      playSound("turn")
+    }
   }, [yourTurn])
+
+  const seenSeq = useRef(view.seq)
+  useEffect(() => {
+    if (view.seq === seenSeq.current) return
+    seenSeq.current = view.seq
+    const sound = eventSound(view)
+    if (sound) playSound(sound)
+  }, [view])
+
+  // The server sends time left, not a timestamp, so device clock skew doesn't matter.
+  const deadline = useMemo(
+    () =>
+      view.turnMsLeft === undefined ? null : Date.now() + view.turnMsLeft,
+    [view],
+  )
+  const msLeft = useCountdown(connected ? deadline : null)
+  const secsLeft = msLeft === null ? null : Math.ceil(msLeft / 1000)
+  useEffect(() => {
+    if (yourTurn && secsLeft !== null && secsLeft > 0 && secsLeft <= 5)
+      playSound("tick")
+  }, [yourTurn, secsLeft])
 
   function act(action: GameAction) {
     commands.act(action)
@@ -257,14 +315,6 @@ export function Game({
 
   return (
     <div className="game">
-      <p className="game-status" aria-live="polite">
-        {prompt(
-          view,
-          yourTurn,
-          offline.has(view.players[view.turnIdx]?.id ?? ""),
-        )}
-      </p>
-
       <div
         className={`table ${view.players.length >= 6 ? "table--large" : ""}`}>
         <div className="felt">
@@ -272,13 +322,13 @@ export function Game({
           {renderPool("down", view.poolDown)}
         </div>
 
-        {opponentsInOrder(view).map((seat, k) => {
+        {opponentsInOrder(view).map(({ seat, k }) => {
           const p = view.players[seat]!
           return (
             <div
               key={p.id}
               className={`seat ${view.turnIdx === seat && !showdown ? "seat--turn" : ""} ${p.out ? "seat--out" : ""}`}
-              style={rimStyle(k + 1, view.players.length)}>
+              style={rimStyle(k, view.players.length)}>
               <span className="seat-name">{p.name}</span>
               <div className="card-row card-row--sm">
                 {p.hand.map((c, i) => (
@@ -328,6 +378,27 @@ export function Game({
           </div>
         )}
       </div>
+
+      <div className="game-side">
+      <p className="game-status" aria-live="polite">
+        {prompt(
+          view,
+          yourTurn,
+          offline.has(view.players[view.turnIdx]?.id ?? ""),
+        )}
+        {yourTurn && secsLeft !== null && ` (${secsLeft}s)`}
+      </p>
+      {msLeft !== null && (
+        <div
+          className={`turn-timer ${secsLeft! <= 5 ? "turn-timer--low" : ""}`}
+          aria-hidden="true">
+          <span
+            style={{
+              width: `${Math.min(100, (msLeft / ROOM_LIMITS.turnMs) * 100)}%`,
+            }}
+          />
+        </div>
+      )}
 
       <p className="game-log">
         {showdown ? resultText(view) : describeEvent(view, ev)}
@@ -400,6 +471,7 @@ export function Game({
         <button className="secondary" onClick={onLeave}>
           Leave
         </button>
+      </div>
       </div>
     </div>
   )
