@@ -3,8 +3,13 @@
  * sanitized view sent to clients. Generic over N seats.
  *
  * Round flow: deal -> opener keeps/pushes (schieben) -> turns clockwise
- * (swap one/all with the face-up or face-down pool, knock, or lay down 31/33)
- * -> after a knock everyone else gets one last turn -> showdown.
+ * (swap one/all with the face-up or face-down pool, or knock) -> after a knock
+ * everyone else gets one last turn -> showdown.
+ *
+ * Whoever holds 31/33 (once hands are revealed, or right after swapping into
+ * it) must lay down, even out of turn. Making any other move first, or letting
+ * the window time out (`missFire`, driven by the host's clock), costs that
+ * player a life instead.
  */
 
 import { buildDeck, DECK_SIZE, shuffle } from "./deck.js"
@@ -30,7 +35,10 @@ export type GameAction =
 
 export type GameEvent =
   | { type: "deal" }
-  | { type: "keep" | "push" | "knock" | "stand" | "layDown"; seat: number }
+  | {
+      type: "keep" | "push" | "knock" | "stand" | "layDown" | "missFire"
+      seat: number
+    }
   | {
       type: "swap"
       seat: number
@@ -41,7 +49,7 @@ export type GameEvent =
   | { type: "swapAll"; seat: number; pool: PoolName }
 
 export interface RoundResult {
-  reason: "showdown" | "layDown"
+  reason: "showdown" | "layDown" | "missedFire"
   /** Per seat; `null` for players who were already out. */
   scores: (number | null)[]
   losers: number[]
@@ -72,6 +80,10 @@ export interface GameState {
   startingIdx: number
   turnIdx: number
   knockerIdx: number | null
+  /** Seats holding 31/33 that must lay down now; secret, never sent to clients. */
+  fire: number[]
+  /** The knock came back around, but the showdown waits for open lay-down windows. */
+  pendingShowdown: boolean
   /** Bumped on every event so clients can re-trigger animations. */
   seq: number
   lastEvent: GameEvent
@@ -113,6 +125,8 @@ export function createGame(
     startingIdx: seats.length - 1,
     turnIdx: 0,
     knockerIdx: null,
+    fire: [],
+    pendingShowdown: false,
     seq: 0,
     lastEvent: { type: "deal" },
     result: null,
@@ -138,6 +152,8 @@ export function startRound(state: GameState, rng: Rng = Math.random): void {
   state.startingIdx = nextAlive(state, state.startingIdx)
   state.turnIdx = state.startingIdx
   state.knockerIdx = null
+  state.fire = []
+  state.pendingShowdown = false
   state.result = null
   state.phase = "schieben"
   emit(state, { type: "deal" })
@@ -152,9 +168,18 @@ export function applyAction(
   if (state.phase !== "schieben" && state.phase !== "play") {
     throw new GameError("The round is over.")
   }
-  if (seat !== state.turnIdx) throw new GameError("It's not your turn.")
   if (!action || typeof action !== "object")
     throw new GameError("Unknown action.")
+  if (state.phase === "play" && action.type === "LAY_DOWN") {
+    if (!state.fire.includes(seat)) {
+      throw new GameError("You need 31 or three aces to lay down.")
+    }
+    emit(state, { type: "layDown", seat })
+    endRound(state, "layDown", seat)
+    return
+  }
+  if (seat !== state.turnIdx || state.pendingShowdown)
+    throw new GameError("It's not your turn.")
   const player = state.players[seat]!
 
   if (state.phase === "schieben") {
@@ -165,19 +190,24 @@ export function applyAction(
     }
     emit(state, { type: action.type === "PUSH" ? "push" : "keep", seat })
     state.phase = "play"
-    // Feuer: an opening 31/33 keeps the turn so the opener can lay down at once.
-    if (!isInstantWin(player.hand)) state.turnIdx = nextAlive(state, seat)
+    state.fire = state.players.flatMap((p, i) =>
+      !p.out && isInstantWin(p.hand) ? [i] : [],
+    )
+    state.turnIdx = nextAlive(state, seat)
+    return
+  }
+
+  if (
+    state.fire.includes(seat) &&
+    (action.type === "KNOCK" ||
+      action.type === "SWAP" ||
+      action.type === "SWAP_ALL")
+  ) {
+    missFire(state, seat)
     return
   }
 
   switch (action.type) {
-    case "LAY_DOWN":
-      if (!isInstantWin(player.hand)) {
-        throw new GameError("You need 31 or three aces to lay down.")
-      }
-      emit(state, { type: "layDown", seat })
-      endRound(state, seat)
-      return
     case "KNOCK":
       if (state.knockerIdx === null) {
         state.knockerIdx = seat
@@ -210,7 +240,17 @@ export function applyAction(
     default:
       throw new GameError("Unknown action.")
   }
+  if (isInstantWin(player.hand)) state.fire.push(seat)
   advanceTurn(state)
+}
+
+/** `seat`'s lay-down window ran out: the round ends with only them losing a life. */
+export function missFire(state: GameState, seat: number): void {
+  if (state.phase !== "play" || !state.fire.includes(seat)) {
+    throw new GameError("No lay-down is pending.")
+  }
+  emit(state, { type: "missFire", seat })
+  endRound(state, "missedFire", seat)
 }
 
 /** What one seat may see: own hand (mostly), face-up pool (after the opening), and all hands at showdown. */
@@ -226,6 +266,7 @@ export interface GameView {
   startingIdx: number
   turnIdx: number
   knockerIdx: number | null
+  pendingShowdown: boolean
   seq: number
   lastEvent: GameEvent
   result: RoundResult | null
@@ -261,6 +302,7 @@ export function viewFor(state: GameState, seat: number): GameView {
     startingIdx: state.startingIdx,
     turnIdx: state.turnIdx,
     knockerIdx: state.knockerIdx,
+    pendingShowdown: state.pendingShowdown,
     seq: state.seq,
     lastEvent: { ...state.lastEvent },
     result: state.result && {
@@ -321,18 +363,28 @@ function poolCards(state: GameState, pool: unknown): Card[] {
 
 function advanceTurn(state: GameState): void {
   state.turnIdx = nextAlive(state, state.turnIdx)
-  if (state.turnIdx === state.knockerIdx) endRound(state, null)
+  if (state.turnIdx !== state.knockerIdx) return
+  if (state.fire.length) state.pendingShowdown = true
+  else endRound(state, "showdown", null)
 }
 
-/** Lowest hand loses a life (ties all lose; an all-way showdown tie costs nobody). */
-function endRound(state: GameState, layDownSeat: number | null): void {
+/**
+ * Showdown: the lowest hand loses a life (ties all lose; an all-way tie costs nobody).
+ * Lay-down: the lowest of the others loses. Missed lay-down: only `seat` loses.
+ */
+function endRound(
+  state: GameState,
+  reason: RoundResult["reason"],
+  seat: number | null,
+): void {
   const scores = state.players.map((p) => (p.out ? null : handScore(p.hand)))
   const contenders = state.players
     .map((_, i) => i)
-    .filter((i) => scores[i] !== null && i !== layDownSeat)
+    .filter((i) => scores[i] !== null && i !== seat)
   const low = Math.min(...contenders.map((i) => scores[i]!))
   let losers = contenders.filter((i) => scores[i] === low)
-  if (layDownSeat === null && losers.length === contenders.length) losers = []
+  if (reason === "showdown" && losers.length === contenders.length) losers = []
+  if (reason === "missedFire") losers = [seat!]
 
   const eliminated: number[] = []
   for (const i of losers) {
@@ -343,8 +395,10 @@ function endRound(state: GameState, layDownSeat: number | null): void {
       eliminated.push(i)
     }
   }
+  state.fire = []
+  state.pendingShowdown = false
   state.result = {
-    reason: layDownSeat === null ? "showdown" : "layDown",
+    reason,
     scores,
     losers,
     eliminated,

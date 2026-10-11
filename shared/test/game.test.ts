@@ -6,6 +6,7 @@ import {
   applyAction,
   createGame,
   GameError,
+  missFire,
   startRound,
   viewFor,
   type GameState,
@@ -133,14 +134,57 @@ describe("applyAction", () => {
     expect(g).toMatchObject({ phase: "play", turnIdx: 1 })
   })
 
-  it("an opening 31 keeps the opener's turn to lay down", () => {
-    const g = game()
+  it("after the opening, everyone holding 31/33 must lay down; the turn still passes", () => {
+    const g = game(3)
     g.players[0]!.hand = hand("A♠", "K♠", "Q♠")
+    g.players[2]!.hand = hand("A♥", "A♦", "A♣")
+    g.players[1]!.hand = hand("7♠", "8♥", "9♦")
     applyAction(g, 0, { type: "KEEP" })
-    expect(g.turnIdx).toBe(0)
+    expect(g).toMatchObject({ turnIdx: 1, fire: [0, 2] })
+    expect(viewFor(g, 0)).not.toHaveProperty("fire")
+    applyAction(g, 2, { type: "LAY_DOWN" })
+    expect(g.result).toMatchObject({ reason: "layDown", losers: [1] })
+    expect(g.fire).toEqual([])
+  })
+
+  it("swapping into 31 opens a window to lay down out of turn", () => {
+    const g = inPlay(3)
+    g.players[1]!.hand = hand("A♠", "K♠", "7♥")
+    g.players[0]!.hand = hand("7♠", "8♥", "9♦")
+    g.poolUp = hand("Q♠", "8♣", "9♣")
+    applyAction(g, 1, { type: "SWAP", pool: "up", handIdx: 2, poolIdx: 0 })
+    expect(g).toMatchObject({ turnIdx: 2, fire: [1] })
+    applyAction(g, 1, { type: "LAY_DOWN" })
+    expect(g.result).toMatchObject({ reason: "layDown", losers: [0] })
+  })
+
+  it("a missed window or any other move costs only the 31/33 holder a life", () => {
+    const g = inPlay(3)
+    g.fire = [1]
+    g.players[1]!.hand = hand("A♠", "K♠", "Q♠")
+    applyAction(g, 1, { type: "KNOCK" })
+    expect(g.result).toMatchObject({ reason: "missedFire", losers: [1] })
+    expect(g.lastEvent).toEqual({ type: "missFire", seat: 1 })
+    expect(g.players.map((p) => p.lives)).toEqual([3, 2, 3])
+
+    const h = inPlay(3)
+    h.fire = [2]
+    missFire(h, 2)
+    expect(h.result).toMatchObject({ reason: "missedFire", losers: [2] })
+    expect(() => missFire(h, 2)).toThrow(GameError)
+  })
+
+  it("the showdown waits for an open window", () => {
+    const g = inPlay()
+    g.players[1]!.hand = hand("A♥", "7♣", "8♦")
+    g.players[0]!.hand = hand("A♠", "K♠", "7♥")
+    g.poolUp = hand("Q♠", "8♣", "9♣")
+    applyAction(g, 1, { type: "KNOCK" })
+    applyAction(g, 0, { type: "SWAP", pool: "up", handIdx: 2, poolIdx: 0 })
+    expect(g).toMatchObject({ phase: "play", pendingShowdown: true })
+    expect(() => applyAction(g, 1, { type: "KNOCK" })).toThrow("not your turn")
     applyAction(g, 0, { type: "LAY_DOWN" })
     expect(g.result).toMatchObject({ reason: "layDown", losers: [1] })
-    expect(g.players[1]!.lives).toBe(2)
   })
 
   it("swaps single cards and whole hands with either pool", () => {
@@ -210,13 +254,11 @@ describe("applyAction", () => {
     expect(g.result?.losers).toEqual([])
   })
 
-  it("only lays down with 31 or three aces", () => {
+  it("only lays down with an open window (31 or three aces)", () => {
     const g = inPlay()
     g.players[1]!.hand = hand("A♠", "K♠", "9♠")
     expect(() => applyAction(g, 1, { type: "LAY_DOWN" })).toThrow("31")
-    g.players[1]!.hand = hand("A♠", "A♥", "A♦")
-    applyAction(g, 1, { type: "LAY_DOWN" })
-    expect(g.result).toMatchObject({ reason: "layDown", losers: [0] })
+    expect(() => applyAction(g, 0, { type: "LAY_DOWN" })).toThrow("31")
   })
 
   it("eliminates a player who loses while swimming and ends the game", () => {
@@ -370,12 +412,14 @@ describe("chooseBotAction", () => {
       for (let steps = 0; g.phase !== "gameEnd"; steps++) {
         if (steps > 5000) throw new Error("game did not finish")
         if (g.phase === "roundEnd") startRound(g, rng)
-        else
+        else {
+          const seat = g.fire[0] ?? g.turnIdx
           applyAction(
             g,
-            g.turnIdx,
-            chooseBotAction(viewFor(g, g.turnIdx), levels[g.turnIdx], rng),
+            seat,
+            chooseBotAction(viewFor(g, seat), levels[seat], rng),
           )
+        }
       }
     }
   })

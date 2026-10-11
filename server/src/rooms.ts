@@ -14,6 +14,7 @@ import {
   chooseBotAction,
   convertToBot,
   createGame,
+  missFire,
   ROOM_LIMITS,
   seatedPlayers,
   startBlocker,
@@ -38,6 +39,7 @@ export const NEXT_ROUND_MS = 5000
 export const TURN_MS = ROOM_LIMITS.turnMs
 /** A disconnected human's turn is played by a stand-in bot after this long. */
 export const AWAY_TURN_MS = 15_000
+export const FIRE_MS = ROOM_LIMITS.fireMs
 /** Skill of the stand-in for disconnected or departed humans. */
 const STAND_IN_LEVEL: BotLevel = "normal"
 
@@ -55,6 +57,8 @@ interface ServerRoom extends RoomState {
   timerKey: string | null
   /** When the human turn at game `seq` auto-plays (epoch ms). */
   deadline: { seq: number; at: number } | null
+  /** Lay-down windows, keyed `round:seat`. */
+  fireTimers: Map<string, ReturnType<typeof setTimeout>>
 }
 
 interface Session {
@@ -145,13 +149,19 @@ function play(
   action: GameAction,
 ): void {
   applyAction(game, seat, action)
+  logRoundEnd(code, game)
+}
+
+function logRoundEnd(code: string, game: GameState): void {
   const r = game.result
   if (!r || (game.phase !== "roundEnd" && game.phase !== "gameEnd")) return
   const ev = game.lastEvent
   const how =
     ev.type === "layDown"
       ? `${q(game.players[ev.seat]!.name)} laid down`
-      : "showdown"
+      : ev.type === "missFire"
+        ? `${q(game.players[ev.seat]!.name)} missed the lay-down`
+        : "showdown"
   const out = r.eliminated.length
     ? `; eliminated: ${playerNames(game, r.eliminated)}`
     : ""
@@ -195,6 +205,7 @@ export class RoomManager {
       timer: null,
       timerKey: null,
       deadline: null,
+      fireTimers: new Map(),
     }
     this.rooms.set(code, room)
     const { player, result } = this.admit(room, socketId, name)
@@ -431,6 +442,7 @@ export class RoomManager {
     const room = this.hostRoom(socketId).room
     if (room.phase === "lobby") return room
     this.clearTimer(room)
+    this.clearFireTimers(room)
     room.game = null
     room.phase = "lobby"
     for (const p of seatedPlayers(room)) p.ready = p.isHost || p.isBot
@@ -456,12 +468,18 @@ export class RoomManager {
     const room = this.rooms.get(code)
     if (!room) return
     const game = room.game
-    if (!game) return this.clearTimer(room)
+    if (!game) {
+      this.clearFireTimers(room)
+      return this.clearTimer(room)
+    }
+    this.scheduleFire(room, game, onStep)
 
     const current = game.players[game.turnIdx]!
     const away =
       room.seats.find((p) => p?.id === current.id)?.connected === false
-    const live = game.phase === "schieben" || game.phase === "play"
+    const live =
+      (game.phase === "schieben" || game.phase === "play") &&
+      !game.pendingShowdown
     const kind =
       game.phase === "roundEnd"
         ? "round"
@@ -522,6 +540,45 @@ export class RoomManager {
       step()
       onStep(code)
     }, delay)
+  }
+
+  /** One timer per open lay-down window: bots lay down after thinking, humans who miss it pay. */
+  private scheduleFire(
+    room: ServerRoom,
+    game: GameState,
+    onStep: (code: string) => void,
+  ): void {
+    const open = new Set(
+      game.phase === "play" ? game.fire.map((s) => `${game.round}:${s}`) : [],
+    )
+    for (const [key, timer] of room.fireTimers) {
+      if (open.has(key)) continue
+      clearTimeout(timer)
+      room.fireTimers.delete(key)
+    }
+    for (const seat of game.phase === "play" ? game.fire : []) {
+      const key = `${game.round}:${seat}`
+      if (room.fireTimers.has(key)) continue
+      const player = game.players[seat]!
+      const delay = player.isBot
+        ? BOT_THINK_MS.min +
+          Math.random() * (BOT_THINK_MS.max - BOT_THINK_MS.min)
+        : FIRE_MS
+      const timer = setTimeout(() => {
+        room.fireTimers.delete(key)
+        if (this.rooms.get(room.code) !== room || room.game !== game) return
+        if (game.phase !== "play" || !game.fire.includes(seat)) return
+        // Checked now, not when armed: a human may have left in the meantime.
+        if (player.isBot) {
+          play(room.code, game, seat, { type: "LAY_DOWN" })
+        } else {
+          missFire(game, seat)
+          logRoundEnd(room.code, game)
+        }
+        onStep(room.code)
+      }, delay)
+      room.fireTimers.set(key, timer)
+    }
   }
 
   /** Each connected player's and spectator's socket paired with their personalized view. */
@@ -634,6 +691,7 @@ export class RoomManager {
 
   private deleteRoom(room: ServerRoom): void {
     this.clearTimer(room)
+    this.clearFireTimers(room)
     for (const member of room.members.values()) {
       this.tokens.delete(member.token)
       if (member.socketId) this.sockets.delete(member.socketId)
@@ -650,6 +708,11 @@ export class RoomManager {
     if (room.timer) clearTimeout(room.timer)
     room.timer = null
     room.timerKey = null
+  }
+
+  private clearFireTimers(room: ServerRoom): void {
+    for (const timer of room.fireTimers.values()) clearTimeout(timer)
+    room.fireTimers.clear()
   }
 
   private memberRoom(socketId: string): { room: ServerRoom; playerId: string } {

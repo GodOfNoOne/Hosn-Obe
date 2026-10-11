@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { AWAY_TURN_MS, RoomError, RoomManager, TURN_MS } from "../src/rooms.js"
+import {
+  AWAY_TURN_MS,
+  FIRE_MS,
+  RoomError,
+  RoomManager,
+  TURN_MS,
+} from "../src/rooms.js"
 
 function ok<T extends { ok: boolean }>(r: T): Extract<T, { ok: true }> {
   if (!r.ok) throw new Error(JSON.stringify(r))
@@ -357,6 +363,26 @@ describe("RoomManager gameplay", () => {
     rooms.schedule(code, onStep)
     vi.advanceTimersByTime(TURN_MS - 1)
     expect(game()).toMatchObject({ phase: "play", turnIdx: 1, seq: seq + 2 })
+  })
+
+  it("costs a human holding 31 a life if they don't lay down in time", () => {
+    vi.useFakeTimers()
+    const { rooms, code, game } = started()
+    const onStep = vi.fn((c: string) => rooms.schedule(c, onStep))
+    game().players[0]!.hand = [
+      { suit: "♠", rank: "A", val: 11, red: false },
+      { suit: "♠", rank: "K", val: 10, red: false },
+      { suit: "♠", rank: "Q", val: 10, red: false },
+    ]
+    rooms.gameAction("s-host", { type: "KEEP" })
+    rooms.schedule(code, onStep)
+    vi.advanceTimersByTime(FIRE_MS - 1)
+    expect(game().phase).toBe("play")
+    vi.advanceTimersByTime(1)
+    expect(game().result).toMatchObject({
+      reason: "missedFire",
+      losers: [0],
+    })
   })
 
   it("plays a slow human's turn after the turn time, without re-arming on every sync", () => {

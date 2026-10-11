@@ -124,6 +124,8 @@ function sampleWorld(view: GameView, hand: Card[], pool: Card[], rng: Rng): Game
     startingIdx: view.startingIdx,
     turnIdx: view.you,
     knockerIdx: view.knockerIdx,
+    fire: players.flatMap((p, i) => (!p.out && i !== view.you && isInstantWin(p.hand) ? [i] : [])),
+    pendingShowdown: view.pendingShowdown,
     seq: view.seq,
     lastEvent: view.lastEvent,
     result: null,
@@ -138,6 +140,7 @@ function cloneWorld(s: GameState): GameState {
     deck: s.deck.slice(),
     poolUp: s.poolUp.slice(),
     poolDown: s.poolDown.slice(),
+    fire: s.fire.slice(),
   };
 }
 
@@ -145,7 +148,8 @@ function cloneWorld(s: GameState): GameState {
 function playOut(world: GameState, you: number, action: GameAction, rng: Rng): number {
   applyAction(world, you, action);
   while (world.phase === "play") {
-    const seat = world.turnIdx;
+    // Bots always lay down in time, so an open window is resolved first.
+    const seat = world.fire[0] ?? world.turnIdx;
     applyAction(world, seat, chooseBotAction(viewFor(world, seat), "normal", rng));
   }
   return world.result?.losers.includes(you) ? 1 : 0;

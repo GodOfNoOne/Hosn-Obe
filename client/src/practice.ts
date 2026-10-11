@@ -3,6 +3,7 @@ import {
   chooseBotAction,
   createGame,
   GameError,
+  missFire,
   ROOM_LIMITS,
   seatedPlayers,
   startRound,
@@ -32,6 +33,8 @@ export class PracticeTable implements RoomCommands {
   private readonly room: RoomState
   private game: GameState | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
+  /** Lay-down windows, keyed `round:seat`. */
+  private readonly fireTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   constructor(
     name: string,
@@ -73,6 +76,7 @@ export class PracticeTable implements RoomCommands {
 
   dispose(): void {
     this.clearTimer()
+    this.clearFireTimers()
   }
 
   setReady(): void {}
@@ -129,6 +133,7 @@ export class PracticeTable implements RoomCommands {
 
   returnToLobby(): void {
     this.clearTimer()
+    this.clearFireTimers()
     this.game = null
     this.room.phase = "lobby"
     this.changed()
@@ -166,6 +171,7 @@ export class PracticeTable implements RoomCommands {
     this.clearTimer()
     const game = this.game
     if (!game) return
+    this.scheduleFire(game)
     const current = game.players[game.turnIdx]!
     let delay: number
     let step: () => void
@@ -174,6 +180,7 @@ export class PracticeTable implements RoomCommands {
       step = () => startRound(game)
     } else if (
       (game.phase === "schieben" || game.phase === "play") &&
+      !game.pendingShowdown &&
       current.isBot
     ) {
       delay =
@@ -207,6 +214,40 @@ export class PracticeTable implements RoomCommands {
   private clearTimer(): void {
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
+  }
+
+  /** Bots lay down after thinking; you pay if you miss your window. */
+  private scheduleFire(game: GameState): void {
+    const fire = game.phase === "play" ? game.fire : []
+    const open = new Set(fire.map((s) => `${game.round}:${s}`))
+    for (const [key, timer] of this.fireTimers) {
+      if (open.has(key)) continue
+      clearTimeout(timer)
+      this.fireTimers.delete(key)
+    }
+    for (const seat of fire) {
+      const key = `${game.round}:${seat}`
+      if (this.fireTimers.has(key)) continue
+      const bot = game.players[seat]!.isBot
+      const delay = bot
+        ? BOT_THINK_MS.min +
+          Math.random() * (BOT_THINK_MS.max - BOT_THINK_MS.min)
+        : ROOM_LIMITS.fireMs
+      const timer = setTimeout(() => {
+        this.fireTimers.delete(key)
+        if (this.game !== game || game.phase !== "play") return
+        if (!game.fire.includes(seat)) return
+        if (bot) applyAction(game, seat, { type: "LAY_DOWN" })
+        else missFire(game, seat)
+        this.changed()
+      }, delay)
+      this.fireTimers.set(key, timer)
+    }
+  }
+
+  private clearFireTimers(): void {
+    for (const timer of this.fireTimers.values()) clearTimeout(timer)
+    this.fireTimers.clear()
   }
 
   private compact(): void {
