@@ -142,9 +142,21 @@ describe("applyAction", () => {
     applyAction(g, 0, { type: "KEEP" })
     expect(g).toMatchObject({ turnIdx: 1, fire: [0, 2] })
     expect(viewFor(g, 0)).not.toHaveProperty("fire")
-    applyAction(g, 2, { type: "LAY_DOWN" })
+    applyAction(g, 0, { type: "LAY_DOWN" })
     expect(g.result).toMatchObject({ reason: "layDown", losers: [1] })
     expect(g.fire).toEqual([])
+  })
+
+  it("laying down three aces (33) costs every other player a life", () => {
+    const g = game(4)
+    g.players[0]!.hand = hand("7♠", "8♥", "9♦")
+    g.players[1]!.hand = hand("A♠", "K♠", "Q♠")
+    g.players[2]!.hand = hand("A♥", "A♦", "A♣")
+    g.players[3]!.out = true
+    applyAction(g, 0, { type: "KEEP" })
+    applyAction(g, 2, { type: "LAY_DOWN" })
+    expect(g.result).toMatchObject({ reason: "layDown", losers: [0, 1] })
+    expect(g.players.map((p) => p.lives)).toEqual([2, 2, 3, 3])
   })
 
   it("swapping into 31 opens a window to lay down out of turn", () => {

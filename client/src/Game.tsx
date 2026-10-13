@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 
 import {
   ROOM_LIMITS,
+  THREE_ACES_SCORE,
   type Card,
   type GameAction,
   type GameEvent,
@@ -101,12 +102,19 @@ function resultText(view: GameView): string {
   const lost = r.losers.map((i) => nameOf(view, i))
   const loses = (names: string[]) =>
     `${names.join(", ")} lose${names.length === 1 && names[0] !== "You" ? "s" : ""} a life.`
+  const ev = view.lastEvent
+  const aces =
+    r.reason === "layDown" &&
+    ev.type === "layDown" &&
+    r.scores[ev.seat] === THREE_ACES_SCORE
   const parts = [
     r.reason === "missedFire"
       ? `${lost[0]} didn't lay down in time — ${loses(lost)}`
-      : lost.length
-        ? loses(lost)
-        : "Tie — nobody loses a life.",
+      : aces
+        ? `Three aces! Everyone else loses a life.`
+        : lost.length
+          ? loses(lost)
+          : "Tie — nobody loses a life.",
   ]
   for (const i of r.eliminated)
     parts.push(`${nameOf(view, i)} ${i === view.you ? "are" : "is"} out!`)

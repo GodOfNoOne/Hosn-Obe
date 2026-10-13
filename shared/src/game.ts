@@ -14,7 +14,7 @@
 
 import { buildDeck, DECK_SIZE, shuffle } from "./deck.js"
 import type { BotLevel } from "./net.js"
-import { handScore, isInstantWin } from "./scoring.js"
+import { handScore, isInstantWin, THREE_ACES_SCORE } from "./scoring.js"
 import type { Card, Rng } from "./types.js"
 
 export const HAND_SIZE = 3
@@ -370,7 +370,7 @@ function advanceTurn(state: GameState): void {
 
 /**
  * Showdown: the lowest hand loses a life (ties all lose; an all-way tie costs nobody).
- * Lay-down: the lowest of the others loses. Missed lay-down: only `seat` loses.
+ * Lay-down: the lowest of the others loses (all of them on 33). Missed lay-down: only `seat` loses.
  */
 function endRound(
   state: GameState,
@@ -384,6 +384,8 @@ function endRound(
   const low = Math.min(...contenders.map((i) => scores[i]!))
   let losers = contenders.filter((i) => scores[i] === low)
   if (reason === "showdown" && losers.length === contenders.length) losers = []
+  if (reason === "layDown" && scores[seat!] === THREE_ACES_SCORE)
+    losers = contenders
   if (reason === "missedFire") losers = [seat!]
 
   const eliminated: number[] = []

@@ -5,8 +5,8 @@ Rule fixes and quality-of-life changes after the online launch, done one step at
 | Step | Change                                   | Status  |
 | ---- | ---------------------------------------- | ------- |
 | 1    | Lay down 31/33 immediately (5s window)   | Done    |
-| 2    | 33 costs every other player a life       | Next    |
-| 3    | One-time return of eliminated players    | Planned |
+| 2    | 33 costs every other player a life       | Done    |
+| 3    | One-time return of eliminated players    | Next    |
 | 4    | Leave/end-game warnings + return to game | Planned |
 
 ## Decisions
@@ -20,6 +20,7 @@ Rule fixes and quality-of-life changes after the online launch, done one step at
 ## Step 1: Lay down 31/33 immediately
 
 **Engine** (`shared/src/game.ts`)
+
 - `GameState.fire` lists the seats that must lay down. It's kept on the server and never sent to clients.
 - A window opens:
   - for every live seat holding 31/33 when keep/push ends. The old rule where the opener keeps the turn on a 31 is gone.
@@ -30,12 +31,14 @@ Rule fixes and quality-of-life changes after the online launch, done one step at
 - If the knock comes back around while a window is open, the showdown waits (`pendingShowdown`).
 
 **Server** (`server/src/rooms.ts`)
+
 - Runs one timer per open window, using `ROOM_LIMITS.fireMs` (5000 for now).
 - Bots lay down after their think time. Humans who miss it are penalized.
 
 **Practice** (`client/src/practice.ts`): runs the same timers on the device.
 
 **Client** (`client/src/Game.tsx`)
+
 - A "Lay down!" button is always shown during play, so it never hints that you hold 31/33.
 - There's no countdown on screen.
 - The result text explains a missed lay-down.
@@ -63,10 +66,12 @@ Rule fixes and quality-of-life changes after the online launch, done one step at
 ## Step 4: Leaving by accident
 
 **Warnings**
+
 - Ask for confirmation on in-game "Leave" and on the host's "End game". "Back to lobby" after the game ends doesn't ask.
 - Warn on `beforeunload` during an online game.
 
 **Returning**
+
 - **Server:** leaving mid-game hands the seat to a stand-in bot but keeps the resume token.
   - Resuming turns the seat back into a human (new `convertToHuman` in the engine).
   - The token is dropped when the game ends or goes back to the lobby.
