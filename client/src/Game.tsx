@@ -190,6 +190,7 @@ export function Game({
   connected = true,
   commands,
   onLeave,
+  training,
 }: {
   view: GameView
   room: RoomState
@@ -197,6 +198,7 @@ export function Game({
   connected?: boolean
   commands: RoomCommands
   onLeave: () => void
+  training?: TrainingGuide
 }) {
   const error = useServerError()
   const [handSel, setHandSel] = useState<number | null>(null)
@@ -300,7 +302,7 @@ export function Game({
           {canPlay && (
             <button
               type="button"
-              className={`select-all ${allSel === pool ? "active" : ""}`}
+              className={`select-all ${allSel === pool ? "active" : ""} ${training?.all && training.pool === pool ? "training-target" : ""}`}
               aria-pressed={allSel === pool}
               onClick={() => {
                 setAllSel(allSel === pool ? null : pool)
@@ -317,6 +319,7 @@ export function Game({
               key={`${view.seq}-${pool}-${i}`}
               card={c}
               flash={flashPool(pool, i)}
+              hint={training?.pool === pool && (training.all || training.poolIdx === i)}
               selected={
                 allSel === pool || (poolSel?.pool === pool && poolSel.idx === i)
               }
@@ -408,7 +411,7 @@ export function Game({
 
       <div className="game-side">
         <p className="game-status" aria-live="polite">
-          {prompt(
+          {training?.status ?? prompt(
             view,
             yourTurn,
             offline.has(view.players[view.turnIdx]?.id ?? ""),
@@ -439,6 +442,7 @@ export function Game({
                   key={`${view.seq}-${i}`}
                   card={c}
                   flash={flashHand(view.you, i)}
+                  hint={training?.handIdx === i}
                   selected={allSel !== null || handSel === i}
                   label={`Your card ${i + 1}`}
                   onClick={
@@ -457,7 +461,7 @@ export function Game({
 
         {yourTurn && view.phase === "schieben" && (
           <div className="row">
-            <button className="secondary" onClick={() => act({ type: "KEEP" })}>
+            <button className={`secondary ${training?.action === "KEEP" ? "training-target" : ""}`} onClick={() => act({ type: "KEEP" })}>
               Keep
             </button>
             <button onClick={() => act({ type: "PUSH" })}>Push</button>
@@ -469,12 +473,13 @@ export function Game({
             {canPlay && (
               <>
                 <button
+                  className={training?.action === "SWAP" || training?.action === "SWAP_ALL" ? "training-target" : ""}
                   disabled={!allSel && (handSel === null || !poolSel)}
                   onClick={swap}>
                   Swap
                 </button>
                 <button
-                  className="danger"
+                  className={`danger ${training?.action === "KNOCK" ? "training-target" : ""}`}
                   onClick={() => act({ type: "KNOCK" })}>
                   {view.knockerIdx === null ? "Knock" : "Stand"}
                 </button>
@@ -490,9 +495,9 @@ export function Game({
           </div>
         )}
 
-        {error && <p className="error">{error}</p>}
+        {!training && error && <p className="error">{error}</p>}
 
-        <div className="row row--spaced">
+        {!training && <div className="row row--spaced">
           {isHost && (
             <button
               className="secondary"
@@ -509,10 +514,19 @@ export function Game({
           <button className="secondary" onClick={onLeave}>
             Leave
           </button>
-        </div>
+        </div>}
       </div>
     </div>
   )
+}
+
+export interface TrainingGuide {
+  status?: string
+  handIdx?: number
+  pool?: PoolName
+  poolIdx?: number
+  all?: boolean
+  action?: GameAction["type"]
 }
 
 function seatsOffline(room: RoomState): string[] {

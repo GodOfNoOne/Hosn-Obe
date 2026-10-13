@@ -27,10 +27,11 @@ import {
   saveToken,
 } from "./session.js"
 import { Settings } from "./Settings.js"
+import { Tutorial } from "./Tutorial.js"
 import { socket } from "./socket.js"
 import { isMuted, setMuted } from "./sound.js"
 
-type Screen = "home" | "online" | "settings"
+type Screen = "home" | "online" | "settings" | "tutorial"
 
 /** After this long without a connection, hint that a sleeping server may be waking up. */
 const SLOW_CONNECT_MS = 5000
@@ -117,7 +118,7 @@ export function App() {
     }
   }, [])
 
-  const atTable = practice !== null || room !== null
+  const atTable = practice !== null || room !== null || screen === "tutorial"
   useEffect(() => keepAwake(atTable), [atTable])
 
   useEffect(() => {
@@ -204,6 +205,7 @@ export function App() {
   }
 
   function startPractice() {
+    setScreen("home")
     const table = new PracticeTable(loadName() || "Player", setPracticeSnap)
     setPractice(table)
     setPracticeSnap(table.snapshot())
@@ -220,7 +222,7 @@ export function App() {
   const returnCode =
     !practice && !room && connected ? (loadSeat()?.code ?? null) : null
   const banner =
-    practice || connected
+    practice || screen === "tutorial" || connected
       ? null
       : outdated
         ? OUTDATED_CLIENT_ERROR
@@ -238,7 +240,7 @@ export function App() {
   }
 
   return (
-    <div className="app">
+    <div className={`app ${screen === "tutorial" ? "app--trainer" : ""}`}>
       <header className="topbar">
         {!home && <h1>Hosn Obe</h1>}
         <button
@@ -249,8 +251,8 @@ export function App() {
           onClick={toggleMute}>
           {muted ? "🔇" : "🔊"}
         </button>
-        {practice ? (
-          <span className="status status--practice">practice</span>
+        {practice || screen === "tutorial" ? (
+          <span className="status status--practice">{screen === "tutorial" ? "trainer" : "practice"}</span>
         ) : (
           <span
             className={`status ${connected ? "status--on" : "status--off"}`}>
@@ -309,11 +311,14 @@ export function App() {
         />
       ) : screen === "settings" ? (
         <Settings onBack={() => setScreen("home")} />
+      ) : screen === "tutorial" ? (
+        <Tutorial onClose={() => setScreen("home")} onPractice={startPractice} />
       ) : (
         <Home
           onOnline={() => setScreen("online")}
           onPractice={startPractice}
           onSettings={() => setScreen("settings")}
+          onTutorial={() => setScreen("tutorial")}
           notice={notice}
           returnCode={returnCode}
           onReturn={returnToGame}

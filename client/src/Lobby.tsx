@@ -43,6 +43,8 @@ export function Lobby({
   }
 
   function joinRoom() {
+    // Rejoining the room you left mid-game takes your seat back instead of spectating.
+    if (code === returnCode) return onReturn()
     setBusy(true)
     setError(null)
     saveName(name)

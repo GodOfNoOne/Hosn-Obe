@@ -3,6 +3,7 @@ export function Home({
   onOnline,
   onPractice,
   onSettings,
+  onTutorial,
   notice,
   returnCode,
   onReturn,
@@ -10,6 +11,7 @@ export function Home({
   onOnline: () => void
   onPractice: () => void
   onSettings: () => void
+  onTutorial: () => void
   notice: string | null
   returnCode: string | null
   onReturn: () => void
@@ -50,6 +52,10 @@ export function Home({
         </button>
         <button className="menu-btn menu-btn--plain" onClick={onSettings}>
           <span className="menu-btn-title">Settings</span>
+        </button>
+        <button className="menu-btn menu-btn--plain" onClick={onTutorial}>
+          <span className="menu-btn-title">Tutorial</span>
+          <span className="menu-btn-sub">Play a guided demo game</span>
         </button>
       </nav>
     </div>

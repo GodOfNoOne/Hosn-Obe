@@ -714,6 +714,119 @@ button.menu-btn--plain {
   box-shadow: none;
 }
 
+.trainer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.trainer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.trainer-header span {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+.trainer-header button {
+  flex: none;
+  padding: 8px;
+  font-size: 0.75rem;
+}
+.trainer-coach {
+  border: 1px solid rgba(76, 175, 125, 0.35);
+}
+.trainer-count {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+}
+.trainer-coach h2 {
+  margin: 0 0 8px;
+  font-size: 1.2rem;
+}
+.trainer-coach > p:not(.trainer-count) {
+  margin: 8px 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.trainer-task {
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  background: rgba(76, 175, 125, 0.1);
+  font-weight: 600;
+}
+.trainer-progress {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+}
+.trainer-progress span {
+  flex: 1;
+  height: 4px;
+  border-radius: 4px;
+  background: #343a53;
+}
+.trainer-progress span.active {
+  background: var(--accent);
+}
+.trainer-coach > button {
+  margin-top: 12px;
+  width: 100%;
+}
+.trainer-score {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.trainer-score strong {
+  color: var(--accent);
+}
+.trainer .table {
+  height: 330px;
+}
+.trainer .felt .card {
+  width: min(46px, 12cqw);
+}
+.card.card--hint {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+.training-target {
+  outline: 2px solid #8ff0b5;
+  outline-offset: 3px;
+}
+
+@media (min-width: 700px) and (min-height: 541px) {
+  .app--trainer {
+    max-width: 980px;
+  }
+  .trainer {
+    display: grid;
+    grid-template-columns: minmax(240px, 0.8fr) minmax(330px, 1.2fr);
+    align-items: start;
+  }
+  .trainer-header {
+    grid-column: 1 / -1;
+  }
+  .trainer-coach {
+    grid-column: 1;
+    grid-row: 2 / 4;
+  }
+  .trainer-score,
+  .trainer > .game {
+    grid-column: 2;
+  }
+}
+
 /* Phones held sideways: table on the left, status and controls on the right. */
 @media (orientation: landscape) and (max-height: 540px) {
   .app {
@@ -768,5 +881,32 @@ button.menu-btn--plain {
   .you .card {
     width: 64px;
     height: 92px;
+  }
+  .trainer {
+    display: grid;
+    grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr);
+    align-items: start;
+  }
+  .trainer-header {
+    grid-column: 1 / -1;
+  }
+  .trainer-coach {
+    grid-column: 1;
+    grid-row: 2 / 4;
+  }
+  .trainer-score,
+  .trainer > .game {
+    grid-column: 2;
+  }
+  .trainer > .game {
+    flex-direction: column;
+  }
+  .trainer .game-side {
+    display: contents;
+  }
+  .trainer .table {
+    width: 100%;
+    height: 280px;
+    flex: none;
   }
 }

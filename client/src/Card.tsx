@@ -8,6 +8,7 @@ export function CardView({
   size = "md",
   selected = false,
   flash = false,
+  hint = false,
   onClick,
   label,
 }: {
@@ -15,6 +16,7 @@ export function CardView({
   size?: "sm" | "md"
   selected?: boolean
   flash?: boolean
+  hint?: boolean
   onClick?: () => void
   label?: string
 }) {
@@ -25,6 +27,7 @@ export function CardView({
     onClick ? "selectable" : "",
     selected ? "selected" : "",
     flash ? "swap-flash" : "",
+    hint ? "card--hint" : "",
   ]
     .filter(Boolean)
     .join(" ")
