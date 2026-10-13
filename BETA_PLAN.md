@@ -39,7 +39,7 @@ Rule fixes and quality-of-life changes after the online launch, done one step at
 
 **Client** (`client/src/Game.tsx`)
 
-- A "Lay down!" button is always shown during play, so it never hints that you hold 31/33.
+- A "Lay down!" button appears only while you hold 31/33 during play, including out of turn.
 - There's no countdown on screen.
 - The result text explains a missed lay-down.
 

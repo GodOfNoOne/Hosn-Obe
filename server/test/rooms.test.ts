@@ -334,6 +334,18 @@ describe("RoomManager gameplay", () => {
     expect(rooms.getRoom(code)).toBeNull()
   })
 
+  it("hands the host role to a newcomer if the host left the game", () => {
+    const { rooms, code, room, host } = setup()
+    rooms.addBot("s-host", 1, "easy")
+    rooms.start("s-host")
+    rooms.leaveRoom("s-host")
+    const carol = ok(rooms.joinRoom("s-carol", code, "Carol"))
+    expect(room().hostId).toBe(carol.youId)
+    rooms.resume("s-host2", host.token)
+    expect(room().seats[0]).toMatchObject({ isBot: false, isHost: false })
+    expect(() => rooms.returnToLobby("s-carol")).not.toThrow()
+  })
+
   it("drives bot turns and the next round on a timer", () => {
     vi.useFakeTimers()
     const { rooms, code } = setup()

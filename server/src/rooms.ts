@@ -246,6 +246,13 @@ export class RoomManager {
       room.seats[seatIdx] = player
       log(code, `${q(player.name)} joined`)
     }
+    // The host left mid-game and a bot holds their seat.
+    if (findPlayer(room, room.hostId)?.isBot) {
+      room.hostId = player.id
+      player.isHost = true
+      player.ready = true
+      log(code, `${q(player.name)} is now the host`)
+    }
     return result
   }
 

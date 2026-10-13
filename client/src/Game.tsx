@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 
 import {
   ROOM_LIMITS,
+  isInstantWin,
   THREE_ACES_SCORE,
   type Card,
   type GameAction,
@@ -218,8 +219,13 @@ export function Game({
     (view.phase === "schieben" || view.phase === "play") &&
     !view.pendingShowdown
   const canPlay = yourTurn && view.phase === "play"
-  // Always offered (even out of turn), so it never hints that you hold 31/33.
-  const canLayDown = view.phase === "play" && !!me && !me.out
+  // Holding 31/33 during play always means an open lay-down window.
+  const canLayDown =
+    view.phase === "play" &&
+    !!me &&
+    !me.out &&
+    me.hand.every(Boolean) &&
+    isInstantWin(me.hand as Card[])
   const showdown = view.phase === "roundEnd" || view.phase === "gameEnd"
   const offline = new Set(seatsOffline(room))
   const ev = view.lastEvent
@@ -458,7 +464,7 @@ export function Game({
           </div>
         )}
 
-        {canLayDown && (
+        {(canPlay || canLayDown) && (
           <div className="row">
             {canPlay && (
               <>
@@ -474,11 +480,13 @@ export function Game({
                 </button>
               </>
             )}
-            <button
-              className="laydown"
-              onClick={() => act({ type: "LAY_DOWN" })}>
-              Lay down!
-            </button>
+            {canLayDown && (
+              <button
+                className="laydown"
+                onClick={() => act({ type: "LAY_DOWN" })}>
+                Lay down!
+              </button>
+            )}
           </div>
         )}
 
