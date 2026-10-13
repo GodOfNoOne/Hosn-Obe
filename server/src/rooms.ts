@@ -13,6 +13,7 @@ import {
   BOT_LEVELS,
   chooseBotAction,
   convertToBot,
+  convertToHuman,
   createGame,
   missFire,
   ROOM_LIMITS,
@@ -271,6 +272,22 @@ export class RoomManager {
         staleSocketId: null,
       }
     }
+    // A bot holds the seat of a player who left mid-game.
+    if (player.isBot) {
+      if (!room.game || room.game.phase === "gameEnd") {
+        this.tokens.delete(member.token)
+        room.members.delete(session.playerId)
+        return {
+          result: { ok: false, error: "That game has ended." },
+          staleSocketId: null,
+        }
+      }
+      const isHost = room.hostId === player.id
+      Object.assign(player, { isBot: false, isHost, ready: isHost })
+      delete player.botLevel
+      convertToHuman(room.game, player.id)
+      log(room.code, `${q(player.name)} returned to the game`)
+    }
 
     const stale = member.socketId !== socketId ? member.socketId : null
     if (stale) this.sockets.delete(stale)
@@ -290,14 +307,14 @@ export class RoomManager {
   }
 
   /** Explicitly give up your seat. Returns the affected room, if any. */
-  leaveRoom(socketId: string): ServerRoom | null {
+  leaveRoom(socketId: string): { room: ServerRoom; playerId: string } | null {
     const session = this.sockets.get(socketId)
     if (!session) return null
     const room = this.rooms.get(session.code)
     if (!room) return null
     log(room.code, `${q(this.playerName(room, session.playerId))} left`)
     this.removePlayer(room, session.playerId)
-    return room
+    return { room, playerId: session.playerId }
   }
 
   /** Connection dropped: keep the seat so the player can resume. */
@@ -445,6 +462,12 @@ export class RoomManager {
     if (room.phase === "lobby") return room
     this.clearTimer(room)
     this.clearFireTimers(room)
+    // Players who left mid-game can't come back to the lobby seat their bot holds.
+    for (const [id, member] of room.members) {
+      if (!findPlayer(room, id)?.isBot) continue
+      this.tokens.delete(member.token)
+      room.members.delete(id)
+    }
     room.game = null
     room.phase = "lobby"
     for (const p of seatedPlayers(room)) p.ready = p.isHost || p.isBot
@@ -648,17 +671,22 @@ export class RoomManager {
     return { player, result: { ok: true, code: room.code, youId: id, token } }
   }
 
-  /** Free a human's seat (or hand it to a bot mid-game), promoting a new host if needed. */
+  /** Free a human's seat (or hand it to a bot mid-game, keeping their token to return), promoting a new host if needed. */
   private removePlayer(room: ServerRoom, playerId: string): void {
-    const member = room.members.get(playerId)
-    if (member) {
-      this.tokens.delete(member.token)
-      if (member.socketId) this.sockets.delete(member.socketId)
-      room.members.delete(playerId)
-    }
-
     const idx = room.seats.findIndex((p) => p?.id === playerId)
     const player = room.seats[idx]
+    const midGame = !!player && !!room.game && room.game.phase !== "gameEnd"
+
+    const member = room.members.get(playerId)
+    if (member) {
+      if (member.socketId) this.sockets.delete(member.socketId)
+      member.socketId = null
+      if (!midGame) {
+        this.tokens.delete(member.token)
+        room.members.delete(playerId)
+      }
+    }
+
     if (player && room.game) {
       const level = STAND_IN_LEVEL
       Object.assign(player, {
@@ -679,7 +707,8 @@ export class RoomManager {
 
     const remaining = humans(room)
     if (remaining.length === 0) {
-      this.deleteRoom(room)
+      // A mid-game leaver may still return; `expire` closes the room after the grace period.
+      if (!midGame) this.deleteRoom(room)
       return
     }
     if (room.hostId === playerId) {

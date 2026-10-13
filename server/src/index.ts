@@ -85,11 +85,15 @@ io.on("connection", (socket) => {
   })
 
   function leaveCurrent(): void {
-    const room = rooms.leaveRoom(socket.id)
-    if (room) {
-      socket.leave(room.code)
-      sync(room.code)
-    }
+    const left = rooms.leaveRoom(socket.id)
+    if (!left) return
+    const { room, playerId } = left
+    socket.leave(room.code)
+    sync(room.code)
+    // A mid-game leaver keeps a way back; close the room if nobody is left by then.
+    setTimeout(() => {
+      if (rooms.expire(room.code, playerId)) sync(room.code)
+    }, RESUME_GRACE_MS)
   }
 
   function reply(ack: unknown, result: RoomActionResult): void {

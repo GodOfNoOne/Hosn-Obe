@@ -298,6 +298,42 @@ describe("RoomManager gameplay", () => {
     expect(rooms.getRoom(code)).not.toBeNull()
   })
 
+  it("lets a player who left mid-game return to their seat", () => {
+    const { rooms, code, room, game, bob } = started()
+    rooms.leaveRoom("s-bob")
+    const back = rooms.resume("s-bob2", bob.token).result
+    expect(back).toMatchObject({ ok: true, code, youId: bob.youId })
+    expect(room().seats[1]).toMatchObject({ isBot: false, connected: true })
+    expect(room().seats[1]).not.toHaveProperty("botLevel")
+    expect(game().players[1]!.isBot).toBe(false)
+    expect(new Map(rooms.gameViews(code)).get("s-bob2")?.you).toBe(1)
+  })
+
+  it("drops a mid-game leaver's way back once the game is over or back in the lobby", () => {
+    const a = started()
+    a.rooms.leaveRoom("s-bob")
+    a.game().phase = "gameEnd"
+    expect(a.rooms.resume("s-bob2", a.bob.token).result).toEqual({
+      ok: false,
+      error: "That game has ended.",
+    })
+
+    const b = started()
+    b.rooms.leaveRoom("s-bob")
+    b.rooms.returnToLobby("s-host")
+    expect(b.rooms.resume("s-bob2", b.bob.token).result.ok).toBe(false)
+  })
+
+  it("keeps a game whose last human left until the grace period ends", () => {
+    const { rooms, code, host } = setup()
+    rooms.addBot("s-host", 1, "easy")
+    rooms.start("s-host")
+    rooms.leaveRoom("s-host")
+    expect(rooms.getRoom(code)).not.toBeNull()
+    rooms.expire(code, host.youId)
+    expect(rooms.getRoom(code)).toBeNull()
+  })
+
   it("drives bot turns and the next round on a timer", () => {
     vi.useFakeTimers()
     const { rooms, code } = setup()

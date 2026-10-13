@@ -336,6 +336,15 @@ export function convertToBot(
   }
 }
 
+/** Hand a stand-in bot's seat back to its human. */
+export function convertToHuman(state: GameState, id: string): void {
+  const player = state.players.find((p) => p.id === id)
+  if (player) {
+    player.isBot = false
+    delete player.botLevel
+  }
+}
+
 function noteTaken(
   player: GamePlayer,
   pool: PoolName,

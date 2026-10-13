@@ -488,7 +488,13 @@ export function Game({
           {isHost && (
             <button
               className="secondary"
-              onClick={() => commands.returnToLobby()}>
+              onClick={() => {
+                if (
+                  view.phase === "gameEnd" ||
+                  window.confirm("End the game and go back to the lobby?")
+                )
+                  commands.returnToLobby()
+              }}>
               {view.phase === "gameEnd" ? "Back to lobby" : "End game"}
             </button>
           )}
