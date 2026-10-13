@@ -13,7 +13,9 @@ import {
   BOT_LEVELS,
   chooseBotAction,
   convertToBot,
+  convertToHuman,
   createGame,
+  missFire,
   ROOM_LIMITS,
   seatedPlayers,
   startBlocker,
@@ -38,6 +40,7 @@ export const NEXT_ROUND_MS = 5000
 export const TURN_MS = ROOM_LIMITS.turnMs
 /** A disconnected human's turn is played by a stand-in bot after this long. */
 export const AWAY_TURN_MS = 15_000
+export const FIRE_MS = ROOM_LIMITS.fireMs
 /** Skill of the stand-in for disconnected or departed humans. */
 const STAND_IN_LEVEL: BotLevel = "normal"
 
@@ -55,6 +58,8 @@ interface ServerRoom extends RoomState {
   timerKey: string | null
   /** When the human turn at game `seq` auto-plays (epoch ms). */
   deadline: { seq: number; at: number } | null
+  /** Lay-down windows, keyed `round:seat`. */
+  fireTimers: Map<string, ReturnType<typeof setTimeout>>
 }
 
 interface Session {
@@ -145,16 +150,24 @@ function play(
   action: GameAction,
 ): void {
   applyAction(game, seat, action)
+  logRoundEnd(code, game)
+}
+
+function logRoundEnd(code: string, game: GameState): void {
   const r = game.result
   if (!r || (game.phase !== "roundEnd" && game.phase !== "gameEnd")) return
   const ev = game.lastEvent
   const how =
     ev.type === "layDown"
       ? `${q(game.players[ev.seat]!.name)} laid down`
-      : "showdown"
-  const out = r.eliminated.length
-    ? `; eliminated: ${playerNames(game, r.eliminated)}`
-    : ""
+      : ev.type === "missFire"
+        ? `${q(game.players[ev.seat]!.name)} missed the lay-down`
+        : "showdown"
+  const out =
+    (r.eliminated.length
+      ? `; eliminated: ${playerNames(game, r.eliminated)}`
+      : "") +
+    (r.revived.length ? `; back in: ${playerNames(game, r.revived)}` : "")
   log(
     code,
     `round ${game.round} ended (${how}) - lost a life: ${playerNames(game, r.losers)}${out}`,
@@ -195,6 +208,7 @@ export class RoomManager {
       timer: null,
       timerKey: null,
       deadline: null,
+      fireTimers: new Map(),
     }
     this.rooms.set(code, room)
     const { player, result } = this.admit(room, socketId, name)
@@ -232,6 +246,13 @@ export class RoomManager {
       room.seats[seatIdx] = player
       log(code, `${q(player.name)} joined`)
     }
+    // The host left mid-game and a bot holds their seat.
+    if (findPlayer(room, room.hostId)?.isBot) {
+      room.hostId = player.id
+      player.isHost = true
+      player.ready = true
+      log(code, `${q(player.name)} is now the host`)
+    }
     return result
   }
 
@@ -258,6 +279,22 @@ export class RoomManager {
         staleSocketId: null,
       }
     }
+    // A bot holds the seat of a player who left mid-game.
+    if (player.isBot) {
+      if (!room.game || room.game.phase === "gameEnd") {
+        this.tokens.delete(member.token)
+        room.members.delete(session.playerId)
+        return {
+          result: { ok: false, error: "That game has ended." },
+          staleSocketId: null,
+        }
+      }
+      const isHost = room.hostId === player.id
+      Object.assign(player, { isBot: false, isHost, ready: isHost })
+      delete player.botLevel
+      convertToHuman(room.game, player.id)
+      log(room.code, `${q(player.name)} returned to the game`)
+    }
 
     const stale = member.socketId !== socketId ? member.socketId : null
     if (stale) this.sockets.delete(stale)
@@ -277,14 +314,14 @@ export class RoomManager {
   }
 
   /** Explicitly give up your seat. Returns the affected room, if any. */
-  leaveRoom(socketId: string): ServerRoom | null {
+  leaveRoom(socketId: string): { room: ServerRoom; playerId: string } | null {
     const session = this.sockets.get(socketId)
     if (!session) return null
     const room = this.rooms.get(session.code)
     if (!room) return null
     log(room.code, `${q(this.playerName(room, session.playerId))} left`)
     this.removePlayer(room, session.playerId)
-    return room
+    return { room, playerId: session.playerId }
   }
 
   /** Connection dropped: keep the seat so the player can resume. */
@@ -431,6 +468,13 @@ export class RoomManager {
     const room = this.hostRoom(socketId).room
     if (room.phase === "lobby") return room
     this.clearTimer(room)
+    this.clearFireTimers(room)
+    // Players who left mid-game can't come back to the lobby seat their bot holds.
+    for (const [id, member] of room.members) {
+      if (!findPlayer(room, id)?.isBot) continue
+      this.tokens.delete(member.token)
+      room.members.delete(id)
+    }
     room.game = null
     room.phase = "lobby"
     for (const p of seatedPlayers(room)) p.ready = p.isHost || p.isBot
@@ -456,12 +500,18 @@ export class RoomManager {
     const room = this.rooms.get(code)
     if (!room) return
     const game = room.game
-    if (!game) return this.clearTimer(room)
+    if (!game) {
+      this.clearFireTimers(room)
+      return this.clearTimer(room)
+    }
+    this.scheduleFire(room, game, onStep)
 
     const current = game.players[game.turnIdx]!
     const away =
       room.seats.find((p) => p?.id === current.id)?.connected === false
-    const live = game.phase === "schieben" || game.phase === "play"
+    const live =
+      (game.phase === "schieben" || game.phase === "play") &&
+      !game.pendingShowdown
     const kind =
       game.phase === "roundEnd"
         ? "round"
@@ -522,6 +572,45 @@ export class RoomManager {
       step()
       onStep(code)
     }, delay)
+  }
+
+  /** One timer per open lay-down window: bots lay down after thinking, humans who miss it pay. */
+  private scheduleFire(
+    room: ServerRoom,
+    game: GameState,
+    onStep: (code: string) => void,
+  ): void {
+    const open = new Set(
+      game.phase === "play" ? game.fire.map((s) => `${game.round}:${s}`) : [],
+    )
+    for (const [key, timer] of room.fireTimers) {
+      if (open.has(key)) continue
+      clearTimeout(timer)
+      room.fireTimers.delete(key)
+    }
+    for (const seat of game.phase === "play" ? game.fire : []) {
+      const key = `${game.round}:${seat}`
+      if (room.fireTimers.has(key)) continue
+      const player = game.players[seat]!
+      const delay = player.isBot
+        ? BOT_THINK_MS.min +
+          Math.random() * (BOT_THINK_MS.max - BOT_THINK_MS.min)
+        : FIRE_MS
+      const timer = setTimeout(() => {
+        room.fireTimers.delete(key)
+        if (this.rooms.get(room.code) !== room || room.game !== game) return
+        if (game.phase !== "play" || !game.fire.includes(seat)) return
+        // Checked now, not when armed: a human may have left in the meantime.
+        if (player.isBot) {
+          play(room.code, game, seat, { type: "LAY_DOWN" })
+        } else {
+          missFire(game, seat)
+          logRoundEnd(room.code, game)
+        }
+        onStep(room.code)
+      }, delay)
+      room.fireTimers.set(key, timer)
+    }
   }
 
   /** Each connected player's and spectator's socket paired with their personalized view. */
@@ -589,17 +678,22 @@ export class RoomManager {
     return { player, result: { ok: true, code: room.code, youId: id, token } }
   }
 
-  /** Free a human's seat (or hand it to a bot mid-game), promoting a new host if needed. */
+  /** Free a human's seat (or hand it to a bot mid-game, keeping their token to return), promoting a new host if needed. */
   private removePlayer(room: ServerRoom, playerId: string): void {
-    const member = room.members.get(playerId)
-    if (member) {
-      this.tokens.delete(member.token)
-      if (member.socketId) this.sockets.delete(member.socketId)
-      room.members.delete(playerId)
-    }
-
     const idx = room.seats.findIndex((p) => p?.id === playerId)
     const player = room.seats[idx]
+    const midGame = !!player && !!room.game && room.game.phase !== "gameEnd"
+
+    const member = room.members.get(playerId)
+    if (member) {
+      if (member.socketId) this.sockets.delete(member.socketId)
+      member.socketId = null
+      if (!midGame) {
+        this.tokens.delete(member.token)
+        room.members.delete(playerId)
+      }
+    }
+
     if (player && room.game) {
       const level = STAND_IN_LEVEL
       Object.assign(player, {
@@ -620,7 +714,8 @@ export class RoomManager {
 
     const remaining = humans(room)
     if (remaining.length === 0) {
-      this.deleteRoom(room)
+      // A mid-game leaver may still return; `expire` closes the room after the grace period.
+      if (!midGame) this.deleteRoom(room)
       return
     }
     if (room.hostId === playerId) {
@@ -634,6 +729,7 @@ export class RoomManager {
 
   private deleteRoom(room: ServerRoom): void {
     this.clearTimer(room)
+    this.clearFireTimers(room)
     for (const member of room.members.values()) {
       this.tokens.delete(member.token)
       if (member.socketId) this.sockets.delete(member.socketId)
@@ -650,6 +746,11 @@ export class RoomManager {
     if (room.timer) clearTimeout(room.timer)
     room.timer = null
     room.timerKey = null
+  }
+
+  private clearFireTimers(room: ServerRoom): void {
+    for (const timer of room.fireTimers.values()) clearTimeout(timer)
+    room.fireTimers.clear()
   }
 
   private memberRoom(socketId: string): { room: ServerRoom; playerId: string } {

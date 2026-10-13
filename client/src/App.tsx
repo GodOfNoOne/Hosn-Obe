@@ -18,7 +18,14 @@ import {
   type PracticeSnapshot,
 } from "./practice.js"
 import { Room } from "./Room.js"
-import { clearToken, loadName, loadToken, saveToken } from "./session.js"
+import {
+  clearToken,
+  forgetSeat,
+  loadName,
+  loadSeat,
+  loadToken,
+  saveToken,
+} from "./session.js"
 import { Settings } from "./Settings.js"
 import { socket } from "./socket.js"
 import { isMuted, setMuted } from "./sound.js"
@@ -63,6 +70,7 @@ export function App() {
   useEffect(() => {
     function exitRoom(message: string | null) {
       clearToken()
+      forgetSeat()
       if (roomRef.current) setScreen("online")
       setRoom(null)
       setGame(null)
@@ -130,6 +138,26 @@ export function App() {
 
   const backRef = useRef(() => {})
   backRef.current = () => {
+    if (practice || room) confirmLeave()
+    else if (screen !== "home") setScreen("home")
+    else exitApp()
+  }
+  useEffect(() => onBackButton(() => backRef.current()), [])
+
+  const seatedInGame =
+    !!room &&
+    room.phase === "playing" &&
+    game?.phase !== "gameEnd" &&
+    room.seats.some((p) => p?.id === youId)
+
+  useEffect(() => {
+    if (!seatedInGame) return
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener("beforeunload", warn)
+    return () => window.removeEventListener("beforeunload", warn)
+  }, [seatedInGame])
+
+  function confirmLeave() {
     if (practice) {
       if (
         practiceSnap?.room.phase !== "playing" ||
@@ -137,31 +165,42 @@ export function App() {
       )
         leavePractice()
     } else if (room) {
-      const seated = room.seats.some((p) => p?.id === youId)
-      const question =
-        room.phase === "playing" && seated
-          ? "Leave the game? A bot will take over your seat."
-          : "Leave the room?"
+      const question = seatedInGame
+        ? "Leave the game? A bot will take over your seat until you return."
+        : "Leave the room?"
       if (window.confirm(question)) handleLeave()
-    } else if (screen !== "home") {
-      setScreen("home")
-    } else {
-      exitApp()
     }
   }
-  useEffect(() => onBackButton(() => backRef.current()), [])
 
-  function handleJoined(id: string, token: string) {
-    saveToken(token)
+  function handleJoined(id: string, token: string, code: string) {
+    saveToken(token, code)
     setYouId(id)
   }
 
   function handleLeave() {
     socket.emit("room:leave")
     clearToken()
+    if (!seatedInGame) forgetSeat()
     setScreen("online")
     setRoom(null)
     setGame(null)
+  }
+
+  function returnToGame() {
+    const seat = loadSeat()
+    if (!seat) return
+    socket.emit(
+      "room:resume",
+      { token: seat.token },
+      (result: RoomActionResult) => {
+        if (result.ok) {
+          handleJoined(result.youId, result.token, result.code)
+        } else {
+          forgetSeat()
+          setNotice(result.error)
+        }
+      },
+    )
   }
 
   function startPractice() {
@@ -178,6 +217,8 @@ export function App() {
   }
 
   const home = !practice && !room && screen === "home"
+  const returnCode =
+    !practice && !room && connected ? (loadSeat()?.code ?? null) : null
   const banner =
     practice || connected
       ? null
@@ -231,7 +272,7 @@ export function App() {
             room={practiceSnap.room}
             isHost
             commands={practice}
-            onLeave={leavePractice}
+            onLeave={confirmLeave}
           />
         ) : (
           <Room
@@ -249,7 +290,7 @@ export function App() {
           isHost={room.hostId === youId}
           connected={connected}
           commands={socketCommands}
-          onLeave={handleLeave}
+          onLeave={confirmLeave}
         />
       ) : room ? (
         <Room
@@ -263,6 +304,8 @@ export function App() {
           onJoined={handleJoined}
           onBack={() => setScreen("home")}
           notice={notice}
+          returnCode={returnCode}
+          onReturn={returnToGame}
         />
       ) : screen === "settings" ? (
         <Settings onBack={() => setScreen("home")} />
@@ -272,6 +315,8 @@ export function App() {
           onPractice={startPractice}
           onSettings={() => setScreen("settings")}
           notice={notice}
+          returnCode={returnCode}
+          onReturn={returnToGame}
         />
       )}
     </div>

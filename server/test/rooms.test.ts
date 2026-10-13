@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { AWAY_TURN_MS, RoomError, RoomManager, TURN_MS } from "../src/rooms.js"
+import {
+  AWAY_TURN_MS,
+  FIRE_MS,
+  RoomError,
+  RoomManager,
+  TURN_MS,
+} from "../src/rooms.js"
 
 function ok<T extends { ok: boolean }>(r: T): Extract<T, { ok: true }> {
   if (!r.ok) throw new Error(JSON.stringify(r))
@@ -292,6 +298,54 @@ describe("RoomManager gameplay", () => {
     expect(rooms.getRoom(code)).not.toBeNull()
   })
 
+  it("lets a player who left mid-game return to their seat", () => {
+    const { rooms, code, room, game, bob } = started()
+    rooms.leaveRoom("s-bob")
+    const back = rooms.resume("s-bob2", bob.token).result
+    expect(back).toMatchObject({ ok: true, code, youId: bob.youId })
+    expect(room().seats[1]).toMatchObject({ isBot: false, connected: true })
+    expect(room().seats[1]).not.toHaveProperty("botLevel")
+    expect(game().players[1]!.isBot).toBe(false)
+    expect(new Map(rooms.gameViews(code)).get("s-bob2")?.you).toBe(1)
+  })
+
+  it("drops a mid-game leaver's way back once the game is over or back in the lobby", () => {
+    const a = started()
+    a.rooms.leaveRoom("s-bob")
+    a.game().phase = "gameEnd"
+    expect(a.rooms.resume("s-bob2", a.bob.token).result).toEqual({
+      ok: false,
+      error: "That game has ended.",
+    })
+
+    const b = started()
+    b.rooms.leaveRoom("s-bob")
+    b.rooms.returnToLobby("s-host")
+    expect(b.rooms.resume("s-bob2", b.bob.token).result.ok).toBe(false)
+  })
+
+  it("keeps a game whose last human left until the grace period ends", () => {
+    const { rooms, code, host } = setup()
+    rooms.addBot("s-host", 1, "easy")
+    rooms.start("s-host")
+    rooms.leaveRoom("s-host")
+    expect(rooms.getRoom(code)).not.toBeNull()
+    rooms.expire(code, host.youId)
+    expect(rooms.getRoom(code)).toBeNull()
+  })
+
+  it("hands the host role to a newcomer if the host left the game", () => {
+    const { rooms, code, room, host } = setup()
+    rooms.addBot("s-host", 1, "easy")
+    rooms.start("s-host")
+    rooms.leaveRoom("s-host")
+    const carol = ok(rooms.joinRoom("s-carol", code, "Carol"))
+    expect(room().hostId).toBe(carol.youId)
+    rooms.resume("s-host2", host.token)
+    expect(room().seats[0]).toMatchObject({ isBot: false, isHost: false })
+    expect(() => rooms.returnToLobby("s-carol")).not.toThrow()
+  })
+
   it("drives bot turns and the next round on a timer", () => {
     vi.useFakeTimers()
     const { rooms, code } = setup()
@@ -357,6 +411,26 @@ describe("RoomManager gameplay", () => {
     rooms.schedule(code, onStep)
     vi.advanceTimersByTime(TURN_MS - 1)
     expect(game()).toMatchObject({ phase: "play", turnIdx: 1, seq: seq + 2 })
+  })
+
+  it("costs a human holding 31 a life if they don't lay down in time", () => {
+    vi.useFakeTimers()
+    const { rooms, code, game } = started()
+    const onStep = vi.fn((c: string) => rooms.schedule(c, onStep))
+    game().players[0]!.hand = [
+      { suit: "♠", rank: "A", val: 11, red: false },
+      { suit: "♠", rank: "K", val: 10, red: false },
+      { suit: "♠", rank: "Q", val: 10, red: false },
+    ]
+    rooms.gameAction("s-host", { type: "KEEP" })
+    rooms.schedule(code, onStep)
+    vi.advanceTimersByTime(FIRE_MS - 1)
+    expect(game().phase).toBe("play")
+    vi.advanceTimersByTime(1)
+    expect(game().result).toMatchObject({
+      reason: "missedFire",
+      losers: [0],
+    })
   })
 
   it("plays a slow human's turn after the turn time, without re-arming on every sync", () => {

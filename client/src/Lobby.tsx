@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState } from "react"
 
-import { ROOM_LIMITS, type RoomActionResult } from "@hosn-obe/shared";
+import { ROOM_LIMITS, type RoomActionResult } from "@hosn-obe/shared"
 
-import { loadName, saveName } from "./session.js";
-import { socket } from "./socket.js";
+import { loadName, saveName } from "./session.js"
+import { socket } from "./socket.js"
 
 /** Create or join a room. On success the parent receives your player id; the
  * room contents arrive via the broadcast `room:state` event. */
@@ -11,44 +11,55 @@ export function Lobby({
   onJoined,
   onBack,
   notice,
+  returnCode,
+  onReturn,
 }: {
-  onJoined: (youId: string, token: string) => void;
-  onBack: () => void;
-  notice: string | null;
+  onJoined: (youId: string, token: string, code: string) => void
+  onBack: () => void
+  notice: string | null
+  returnCode: string | null
+  onReturn: () => void
 }) {
-  const [name, setName] = useState(loadName);
-  const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [name, setName] = useState(loadName)
+  const [code, setCode] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   function handleResult(result: RoomActionResult) {
-    setBusy(false);
+    setBusy(false)
     if (result.ok) {
-      setError(null);
-      onJoined(result.youId, result.token);
+      setError(null)
+      onJoined(result.youId, result.token, result.code)
     } else {
-      setError(result.error);
+      setError(result.error)
     }
   }
 
   function createRoom() {
-    setBusy(true);
-    setError(null);
-    saveName(name);
-    socket.emit("room:create", { name }, handleResult);
+    setBusy(true)
+    setError(null)
+    saveName(name)
+    socket.emit("room:create", { name }, handleResult)
   }
 
   function joinRoom() {
-    setBusy(true);
-    setError(null);
-    saveName(name);
-    socket.emit("room:join", { code, name }, handleResult);
+    setBusy(true)
+    setError(null)
+    saveName(name)
+    socket.emit("room:join", { code, name }, handleResult)
   }
 
   return (
     <div className="panel">
       <h2 className="panel-title">Play online</h2>
       {notice && <p className="notice">{notice}</p>}
+      {returnCode && (
+        <div className="row">
+          <button disabled={busy} onClick={onReturn}>
+            Return to game ({returnCode})
+          </button>
+        </div>
+      )}
       <label className="field">
         <span>Your name</span>
         <input
@@ -77,7 +88,9 @@ export function Lobby({
         />
       </label>
       <div className="row">
-        <button disabled={busy || code.length < ROOM_LIMITS.codeLength} onClick={joinRoom}>
+        <button
+          disabled={busy || code.length < ROOM_LIMITS.codeLength}
+          onClick={joinRoom}>
           Join room
         </button>
       </div>
@@ -90,5 +103,5 @@ export function Lobby({
         </button>
       </div>
     </div>
-  );
+  )
 }

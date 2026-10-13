@@ -52,10 +52,12 @@ export const ROOM_LIMITS = {
   nameMaxLength: 20,
   /** A human who doesn't move in time has a stand-in bot play for them. */
   turnMs: 30_000,
+  /** Time to lay down a 31/33 before it costs a life instead. */
+  fireMs: 5000,
 } as const
 
 /** Bump on breaking socket changes; the server turns away apps built for another version. */
-export const PROTOCOL_VERSION = 1
+export const PROTOCOL_VERSION = 2
 export const OUTDATED_CLIENT_ERROR =
   "This app is out of date. Install the latest version to play online."
 

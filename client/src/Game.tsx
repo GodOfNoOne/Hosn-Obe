@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 
 import {
-  isInstantWin,
   ROOM_LIMITS,
+  isInstantWin,
+  THREE_ACES_SCORE,
   type Card,
   type GameAction,
   type GameEvent,
@@ -55,6 +56,8 @@ function describeEvent(view: GameView, ev: GameEvent): string {
       return `${who} stand${ev.seat === view.you ? "" : "s"}.`
     case "layDown":
       return `${who} laid down!`
+    case "missFire":
+      return `${who} didn't lay down in time!`
   }
 }
 
@@ -78,6 +81,7 @@ function prompt(
       : `${turnName} is deciding to keep or push…`
   }
   if (view.phase === "play") {
+    if (view.pendingShowdown) return "Showdown coming up…"
     if (!yourTurn) return `${turnName}'s turn…`
     if (view.knockerIdx !== null) {
       return `${nameOf(view, view.knockerIdx)} knocked — last move: swap or stand.`
@@ -97,13 +101,32 @@ function resultText(view: GameView): string {
   const r = view.result
   if (!r) return ""
   const lost = r.losers.map((i) => nameOf(view, i))
+  const loses = (names: string[]) =>
+    `${names.join(", ")} lose${names.length === 1 && names[0] !== "You" ? "s" : ""} a life.`
+  const ev = view.lastEvent
+  const aces =
+    r.reason === "layDown" &&
+    ev.type === "layDown" &&
+    r.scores[ev.seat] === THREE_ACES_SCORE
   const parts = [
-    lost.length
-      ? `${lost.join(", ")} lose${lost.length === 1 && lost[0] !== "You" ? "s" : ""} a life.`
-      : "Tie — nobody loses a life.",
+    r.reason === "missedFire"
+      ? `${lost[0]} didn't lay down in time — ${loses(lost)}`
+      : aces
+        ? `Three aces! Everyone else loses a life.`
+        : lost.length
+          ? loses(lost)
+          : "Tie — nobody loses a life.",
   ]
   for (const i of r.eliminated)
-    parts.push(`${nameOf(view, i)} ${i === view.you ? "are" : "is"} out!`)
+    if (!r.revived.includes(i))
+      parts.push(`${nameOf(view, i)} ${i === view.you ? "are" : "is"} out!`)
+  if (r.revived.length) {
+    const back = r.revived.map((i) => nameOf(view, i))
+    const are = back.length > 1 || r.revived[0] === view.you ? "are" : "is"
+    parts.push(
+      `Everyone's swimming — ${back.join(", ")} ${are} back in, swimming too!`,
+    )
+  }
   return parts.join(" ")
 }
 
@@ -141,6 +164,7 @@ function eventSound(view: GameView): Sound | null {
     case "layDown":
       return "layDown"
     case "stand":
+    case "missFire":
       return null
     default:
       return "card"
@@ -192,13 +216,16 @@ export function Game({
   const me: PlayerView | undefined = view.players[view.you]
   const yourTurn =
     view.turnIdx === view.you &&
-    (view.phase === "schieben" || view.phase === "play")
+    (view.phase === "schieben" || view.phase === "play") &&
+    !view.pendingShowdown
   const canPlay = yourTurn && view.phase === "play"
-  const myCards = me?.hand.every((c): c is Card => c !== null)
-    ? (me.hand as Card[])
-    : null
+  // Holding 31/33 during play always means an open lay-down window.
   const canLayDown =
-    canPlay && myCards !== null && myCards.length === 3 && isInstantWin(myCards)
+    view.phase === "play" &&
+    !!me &&
+    !me.out &&
+    me.hand.every(Boolean) &&
+    isInstantWin(me.hand as Card[])
   const showdown = view.phase === "roundEnd" || view.phase === "gameEnd"
   const offline = new Set(seatsOffline(room))
   const ev = view.lastEvent
@@ -437,22 +464,27 @@ export function Game({
           </div>
         )}
 
-        {canPlay && (
+        {(canPlay || canLayDown) && (
           <div className="row">
-            <button
-              disabled={!allSel && (handSel === null || !poolSel)}
-              onClick={swap}>
-              Swap
-            </button>
-            {canLayDown ? (
+            {canPlay && (
+              <>
+                <button
+                  disabled={!allSel && (handSel === null || !poolSel)}
+                  onClick={swap}>
+                  Swap
+                </button>
+                <button
+                  className="danger"
+                  onClick={() => act({ type: "KNOCK" })}>
+                  {view.knockerIdx === null ? "Knock" : "Stand"}
+                </button>
+              </>
+            )}
+            {canLayDown && (
               <button
                 className="laydown"
                 onClick={() => act({ type: "LAY_DOWN" })}>
                 Lay down!
-              </button>
-            ) : (
-              <button className="danger" onClick={() => act({ type: "KNOCK" })}>
-                {view.knockerIdx === null ? "Knock" : "Stand"}
               </button>
             )}
           </div>
@@ -464,7 +496,13 @@ export function Game({
           {isHost && (
             <button
               className="secondary"
-              onClick={() => commands.returnToLobby()}>
+              onClick={() => {
+                if (
+                  view.phase === "gameEnd" ||
+                  window.confirm("End the game and go back to the lobby?")
+                )
+                  commands.returnToLobby()
+              }}>
               {view.phase === "gameEnd" ? "Back to lobby" : "End game"}
             </button>
           )}

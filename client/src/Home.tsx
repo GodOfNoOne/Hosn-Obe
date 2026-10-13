@@ -4,11 +4,15 @@ export function Home({
   onPractice,
   onSettings,
   notice,
+  returnCode,
+  onReturn,
 }: {
-  onOnline: () => void;
-  onPractice: () => void;
-  onSettings: () => void;
-  notice: string | null;
+  onOnline: () => void
+  onPractice: () => void
+  onSettings: () => void
+  notice: string | null
+  returnCode: string | null
+  onReturn: () => void
 }) {
   return (
     <div className="home">
@@ -26,18 +30,28 @@ export function Home({
       {notice && <p className="notice">{notice}</p>}
 
       <nav className="menu">
+        {returnCode && (
+          <button className="menu-btn" onClick={onReturn}>
+            <span className="menu-btn-title">Return to game</span>
+            <span className="menu-btn-sub">Room {returnCode}</span>
+          </button>
+        )}
         <button className="menu-btn" onClick={onOnline}>
           <span className="menu-btn-title">Play online</span>
-          <span className="menu-btn-sub">Create or join a room with friends</span>
+          <span className="menu-btn-sub">
+            Create or join a room with friends
+          </span>
         </button>
         <button className="menu-btn menu-btn--alt" onClick={onPractice}>
           <span className="menu-btn-title">Practice</span>
-          <span className="menu-btn-sub">Play against bots — works offline</span>
+          <span className="menu-btn-sub">
+            Play against bots — works offline
+          </span>
         </button>
         <button className="menu-btn menu-btn--plain" onClick={onSettings}>
           <span className="menu-btn-title">Settings</span>
         </button>
       </nav>
     </div>
-  );
+  )
 }
