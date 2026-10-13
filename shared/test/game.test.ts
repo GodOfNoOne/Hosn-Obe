@@ -285,6 +285,48 @@ describe("applyAction", () => {
     expect(() => applyAction(g, 1, { type: "KNOCK" })).toThrow("over")
   })
 
+  /** 4 seats, seat 3 out, seats 0-2 swimming; seat 0 loses a showdown. */
+  function allSwimming(revivalUsed: boolean): GameState {
+    const g = inPlay(4)
+    g.fire = []
+    g.revivalUsed = revivalUsed
+    g.players[3]!.out = true
+    for (const p of g.players) p.lives = 0
+    g.players[0]!.hand = hand("7♠", "8♥", "9♦")
+    g.players[1]!.hand = hand("A♠", "K♠", "7♥")
+    g.players[2]!.hand = hand("A♥", "K♥", "9♥")
+    applyAction(g, 1, { type: "KNOCK" })
+    applyAction(g, 2, { type: "KNOCK" })
+    applyAction(g, 0, { type: "KNOCK" })
+    return g
+  }
+
+  it("once everyone left is swimming, every out player comes back swimming (once per game)", () => {
+    const g = allSwimming(false)
+    expect(g.result).toMatchObject({ eliminated: [0], revived: [0, 3] })
+    expect(g.players.map((p) => [p.out, p.lives])).toEqual([
+      [false, 0],
+      [false, 0],
+      [false, 0],
+      [false, 0],
+    ])
+    expect(g).toMatchObject({ phase: "roundEnd", revivalUsed: true })
+
+    const h = allSwimming(true)
+    expect(h.result).toMatchObject({ eliminated: [0], revived: [] })
+    expect(h.players.map((p) => p.out)).toEqual([true, false, false, true])
+  })
+
+  it("no revival when the round leaves a single player", () => {
+    const g = inPlay(3)
+    g.fire = [2]
+    for (const p of g.players) p.lives = 0
+    g.players[2]!.hand = hand("A♥", "A♦", "A♣")
+    applyAction(g, 2, { type: "LAY_DOWN" })
+    expect(g.result).toMatchObject({ eliminated: [0, 1], revived: [] })
+    expect(g).toMatchObject({ phase: "gameEnd", winnerIdx: 2 })
+  })
+
   it("every tied lowest hand loses a life", () => {
     const g = inPlay(3)
     g.players[0]!.hand = hand("A♠", "K♠", "7♥")

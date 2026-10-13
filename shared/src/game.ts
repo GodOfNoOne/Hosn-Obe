@@ -54,6 +54,8 @@ export interface RoundResult {
   scores: (number | null)[]
   losers: number[]
   eliminated: number[]
+  /** Out players brought back swimming because everyone left was swimming. */
+  revived: number[]
 }
 
 export interface GamePlayer {
@@ -84,6 +86,8 @@ export interface GameState {
   fire: number[]
   /** The knock came back around, but the showdown waits for open lay-down windows. */
   pendingShowdown: boolean
+  /** The once-per-game return of out players has happened. */
+  revivalUsed: boolean
   /** Bumped on every event so clients can re-trigger animations. */
   seq: number
   lastEvent: GameEvent
@@ -127,6 +131,7 @@ export function createGame(
     knockerIdx: null,
     fire: [],
     pendingShowdown: false,
+    revivalUsed: false,
     seq: 0,
     lastEvent: { type: "deal" },
     result: null,
@@ -267,6 +272,7 @@ export interface GameView {
   turnIdx: number
   knockerIdx: number | null
   pendingShowdown: boolean
+  revivalUsed: boolean
   seq: number
   lastEvent: GameEvent
   result: RoundResult | null
@@ -303,6 +309,7 @@ export function viewFor(state: GameState, seat: number): GameView {
     turnIdx: state.turnIdx,
     knockerIdx: state.knockerIdx,
     pendingShowdown: state.pendingShowdown,
+    revivalUsed: state.revivalUsed,
     seq: state.seq,
     lastEvent: { ...state.lastEvent },
     result: state.result && {
@@ -310,6 +317,7 @@ export function viewFor(state: GameState, seat: number): GameView {
       scores: [...state.result.scores],
       losers: [...state.result.losers],
       eliminated: [...state.result.eliminated],
+      revived: [...state.result.revived],
     },
     winnerIdx: state.winnerIdx,
   }
@@ -399,14 +407,31 @@ function endRound(
   }
   state.fire = []
   state.pendingShowdown = false
+
+  const alive = state.players.flatMap((p, i) => (p.out ? [] : [i]))
+  const revived: number[] = []
+  if (
+    !state.revivalUsed &&
+    alive.length >= 2 &&
+    alive.length < state.players.length &&
+    alive.every((i) => state.players[i]!.lives === 0)
+  ) {
+    state.revivalUsed = true
+    state.players.forEach((p, i) => {
+      if (!p.out) return
+      p.out = false
+      p.lives = 0
+      revived.push(i)
+    })
+  }
   state.result = {
     reason,
     scores,
     losers,
     eliminated,
+    revived,
   }
 
-  const alive = state.players.flatMap((p, i) => (p.out ? [] : [i]))
   if (alive.length <= 1) {
     state.phase = "gameEnd"
     state.winnerIdx = alive[0] ?? null

@@ -162,9 +162,11 @@ function logRoundEnd(code: string, game: GameState): void {
       : ev.type === "missFire"
         ? `${q(game.players[ev.seat]!.name)} missed the lay-down`
         : "showdown"
-  const out = r.eliminated.length
-    ? `; eliminated: ${playerNames(game, r.eliminated)}`
-    : ""
+  const out =
+    (r.eliminated.length
+      ? `; eliminated: ${playerNames(game, r.eliminated)}`
+      : "") +
+    (r.revived.length ? `; back in: ${playerNames(game, r.revived)}` : "")
   log(
     code,
     `round ${game.round} ended (${how}) - lost a life: ${playerNames(game, r.losers)}${out}`,

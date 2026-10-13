@@ -152,6 +152,7 @@ function sampleWorld(
       !p.out && i !== view.you && isInstantWin(p.hand) ? [i] : [],
     ),
     pendingShowdown: view.pendingShowdown,
+    revivalUsed: view.revivalUsed,
     seq: view.seq,
     lastEvent: view.lastEvent,
     result: null,

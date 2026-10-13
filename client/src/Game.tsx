@@ -117,7 +117,15 @@ function resultText(view: GameView): string {
           : "Tie — nobody loses a life.",
   ]
   for (const i of r.eliminated)
-    parts.push(`${nameOf(view, i)} ${i === view.you ? "are" : "is"} out!`)
+    if (!r.revived.includes(i))
+      parts.push(`${nameOf(view, i)} ${i === view.you ? "are" : "is"} out!`)
+  if (r.revived.length) {
+    const back = r.revived.map((i) => nameOf(view, i))
+    const are = back.length > 1 || r.revived[0] === view.you ? "are" : "is"
+    parts.push(
+      `Everyone's swimming — ${back.join(", ")} ${are} back in, swimming too!`,
+    )
+  }
   return parts.join(" ")
 }
 

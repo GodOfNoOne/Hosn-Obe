@@ -6,8 +6,8 @@ Rule fixes and quality-of-life changes after the online launch, done one step at
 | ---- | ---------------------------------------- | ------- |
 | 1    | Lay down 31/33 immediately (5s window)   | Done    |
 | 2    | 33 costs every other player a life       | Done    |
-| 3    | One-time return of eliminated players    | Next    |
-| 4    | Leave/end-game warnings + return to game | Planned |
+| 3    | One-time return of eliminated players    | Done    |
+| 4    | Leave/end-game warnings + return to game | Next    |
 
 ## Decisions
 
