@@ -1,0 +1,37 @@
+.card-emote { width: 100%; height: auto; display: block; overflow: visible; filter: drop-shadow(0 3px 2px #0003); }
+.emote-character { transform-origin: 80px 150px; }
+.emote-face { transform-origin: 76px 90px; }
+.emote-mouth { transform-origin: 76px 92px; }
+.emote-toolbar { display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap; }
+.emote-mute { font-size: .75rem; }
+.emote-picker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; background: #19283d; padding: 8px; border: 2px solid #526c8a; border-radius: 16px; margin-top: 8px; box-shadow: 0 6px 18px #0004; }
+.emote-picker button { padding: 4px 2px 7px; background: #2e4360; border: 1px solid #6582a1; border-radius: 10px; color: #fff; min-width: 0; }
+.emote-picker button:hover:not(:disabled) { background: #446487; transform: translateY(-2px); }
+.emote-picker button:focus-visible { outline: 3px solid #ffd66d; outline-offset: 2px; }
+.emote-picker button span { display: block; font-size: .65rem; }
+.emote-hint { color: #adbdcc; display: block; margin-top: 6px; }
+.emote-bubble { position: absolute; width: clamp(76px, 15vw, 116px); bottom: calc(100% - 12px); left: 50%; margin-left: clamp(-58px, -7.5vw, -38px); z-index: 20; pointer-events: none; animation: emote-pop 2.5s both; }
+.table { overflow: visible; }
+.seat { isolation: auto; }
+.game:has(.emote-controls--muted) .emote-bubble { display: none; }
+.card-emote--animated.card-emote--laughing .emote-character { animation: emote-laugh .4s ease-in-out infinite; }
+.card-emote--animated.card-emote--laughing .emote-mouth { animation: emote-mouth .4s ease-in-out infinite; }
+.card-emote--animated.card-emote--angry .emote-character { animation: emote-shake .15s linear infinite; }
+.card-emote--animated .emote-steam { animation: emote-steam .65s ease-out infinite; }
+.card-emote--animated.card-emote--crying .emote-character { animation: emote-sob .55s ease-in-out infinite; }
+.card-emote--animated .emote-tears { animation: emote-tears .55s ease-in infinite; }
+.card-emote--animated.card-emote--gg .emote-character { animation: emote-nod .7s ease-in-out infinite; }
+.card-emote--animated .emote-sparkles { animation: emote-sparkle .7s ease-in-out infinite alternate; }
+@keyframes emote-pop { 0% { opacity: 0; transform: scale(.35) translateY(20px); } 10% { opacity: 1; transform: scale(1.12); } 18%, 86% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(.8) translateY(-12px); } }
+@keyframes emote-laugh { 50% { transform: translateY(-7px) rotate(-5deg) scale(1.04,.96); } }
+@keyframes emote-mouth { 50% { transform: scaleY(.65); } }
+@keyframes emote-shake { 25% { transform: translateX(-3px) rotate(-3deg); } 75% { transform: translateX(3px) rotate(3deg); } }
+@keyframes emote-steam { from { opacity: 1; transform: translateY(8px); } to { opacity: 0; transform: translateY(-12px); } }
+@keyframes emote-sob { 50% { transform: translateY(4px) scale(.97,1.02); } }
+@keyframes emote-tears { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(25px); } }
+@keyframes emote-nod { 50% { transform: translateY(-8px) rotate(7deg); } }
+@keyframes emote-sparkle { to { opacity: .25; transform: scale(.94); } }
+@media (prefers-reduced-motion: reduce) { .card-emote--animated *, .emote-bubble { animation: none !important; } }
+
+.seat[data-emote-below] .emote-bubble { bottom: auto; top: calc(100% - 12px); }
+.seat:has(.emote-bubble) { z-index: 25; }

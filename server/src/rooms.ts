@@ -9,6 +9,9 @@
 import { randomBytes, randomInt, randomUUID } from "node:crypto"
 
 import {
+  EMOTE_COOLDOWN_MS,
+  isEmoteId,
+  type EmoteEvent,
   applyAction,
   BOT_LEVELS,
   chooseBotAction,
@@ -48,6 +51,7 @@ interface Member {
   /** Secret that lets a new connection reclaim this seat. */
   token: string
   socketId: string | null
+  lastEmoteAt?: number
 }
 
 interface ServerRoom extends RoomState {
@@ -481,6 +485,19 @@ export class RoomManager {
     compactSeats(room)
     log(room.code, "back to lobby")
     return room
+  }
+
+  sendEmote(socketId: string, raw: unknown): { code: string; event: EmoteEvent } {
+    const { room, playerId } = this.memberRoom(socketId)
+    if (!room.game || !room.game.players.some(p => p.id === playerId && !p.isBot))
+      throw new RoomError("Only seated players can send emotes during a game.")
+    if (!isEmoteId(raw)) throw new RoomError("Unknown emote.")
+    const member = room.members.get(playerId)!
+    const now = Date.now()
+    if (member.lastEmoteAt !== undefined && now - member.lastEmoteAt < EMOTE_COOLDOWN_MS)
+      throw new RoomError("Wait a moment before sending another emote.")
+    member.lastEmoteAt = now
+    return { code: room.code, event: { playerId, emote: raw } }
   }
 
   gameAction(socketId: string, action: GameAction): ServerRoom {

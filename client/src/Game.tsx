@@ -13,6 +13,7 @@ import {
   type RoomState,
 } from "@hosn-obe/shared"
 
+import { EmotePicker, EmoteBubble, useEmotes } from "./Emotes.js"
 import { CardView, Lives } from "./Card.js"
 import type { RoomCommands } from "./commands.js"
 import { turnFeedback } from "./native.js"
@@ -198,6 +199,7 @@ export function Game({
   commands: RoomCommands
   onLeave: () => void
 }) {
+  const emotes = useEmotes(commands)
   const error = useServerError()
   const [handSel, setHandSel] = useState<number | null>(null)
   const [poolSel, setPoolSel] = useState<{
@@ -355,7 +357,8 @@ export function Game({
             <div
               key={p.id}
               className={`seat ${view.turnIdx === seat && !showdown ? "seat--turn" : ""} ${p.out ? "seat--out" : ""}`}
-              style={rimStyle(k, view.players.length)}>
+              style={rimStyle(k, view.players.length)} data-emote-below={Math.sin(Math.PI / 2 + 2 * Math.PI * k / view.players.length) < -.3 || undefined}>
+              <EmoteBubble event={emotes[p.id]} />
               <span className="seat-name">{p.name}</span>
               <div className="card-row card-row--sm">
                 {p.hand.map((c, i) => (
@@ -388,6 +391,7 @@ export function Game({
           <div
             className={`seat seat--you ${yourTurn ? "seat--turn" : ""} ${me.out ? "seat--out" : ""}`}
             style={rimStyle(0, view.players.length)}>
+            <EmoteBubble event={emotes[me.id]} />
             <span className="seat-name">You</span>
             <div className="seat-foot">
               <Lives lives={me.lives} />
@@ -407,6 +411,7 @@ export function Game({
       </div>
 
       <div className="game-side">
+        {me && <EmotePicker commands={commands} connected={connected} />}
         <p className="game-status" aria-live="polite">
           {prompt(
             view,

@@ -177,6 +177,14 @@ io.on("connection", (socket) => {
   socket.on("room:returnToLobby", () =>
     mutate(() => rooms.returnToLobby(socket.id)),
   )
+  socket.on("game:emote", (emote) => {
+    try {
+      const { code, event } = rooms.sendEmote(socket.id, emote)
+      io.to(code).emit("game:emote", event)
+    } catch (err) {
+      socket.emit("room:error", { message: err instanceof RoomError ? err.message : "Couldn't send emote." })
+    }
+  })
   socket.on("game:action", (action) =>
     mutate(() => rooms.gameAction(socket.id, action)),
   )

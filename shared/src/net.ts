@@ -6,6 +6,15 @@
 
 import type { GameAction, GameView } from "./game.js"
 
+export const EMOTE_IDS = ["laughing", "angry", "crying", "gg"] as const
+export type EmoteId = typeof EMOTE_IDS[number]
+export const EMOTE_DURATION_MS = 2500
+export const EMOTE_COOLDOWN_MS = 3000
+export interface EmoteEvent { playerId: string; emote: EmoteId }
+export function isEmoteId(value: unknown): value is EmoteId {
+  return EMOTE_IDS.some(id => id === value)
+}
+
 export type BotLevel = "easy" | "normal" | "hard"
 export const BOT_LEVELS: readonly BotLevel[] = ["easy", "normal", "hard"]
 
@@ -101,6 +110,7 @@ export interface ClientToServerEvents {
   "room:kick": (payload: { seatIdx: number }) => void
   "room:start": () => void
   "room:returnToLobby": () => void
+  "game:emote": (emote: EmoteId) => void
   "game:action": (action: GameAction) => void
 }
 
@@ -110,5 +120,6 @@ export interface ServerToClientEvents {
   "room:closed": (payload: { reason: string }) => void
   "room:error": (payload: { message: string }) => void
   /** Personalized per seat: never contains cards that seat may not see. */
+  "game:emote": (event: EmoteEvent) => void
   "game:state": (view: GameView) => void
 }

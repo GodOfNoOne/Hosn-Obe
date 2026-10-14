@@ -1,4 +1,8 @@
 import {
+  EMOTE_COOLDOWN_MS,
+  isEmoteId,
+  type EmoteId,
+  type EmoteEvent,
   applyAction,
   chooseBotAction,
   createGame,
@@ -30,6 +34,17 @@ export interface PracticeSnapshot {
 
 /** Offline table of you plus bots, run on this device by the shared game engine. */
 export class PracticeTable implements RoomCommands {
+  private readonly emoteListeners = new Set<(event: EmoteEvent) => void>()
+  private lastEmoteAt = -Infinity
+  subscribeEmotes(listener: (event: EmoteEvent) => void): () => void {
+    this.emoteListeners.add(listener)
+    return () => { this.emoteListeners.delete(listener) }
+  }
+  sendEmote(emote: EmoteId): void {
+    if (!this.game || !isEmoteId(emote) || Date.now() - this.lastEmoteAt < EMOTE_COOLDOWN_MS) return
+    this.lastEmoteAt = Date.now()
+    for (const listener of this.emoteListeners) listener({ playerId: PRACTICE_YOU_ID, emote })
+  }
   private readonly room: RoomState
   private game: GameState | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
@@ -75,6 +90,7 @@ export class PracticeTable implements RoomCommands {
   }
 
   dispose(): void {
+    this.emoteListeners.clear()
     this.clearTimer()
     this.clearFireTimers()
   }

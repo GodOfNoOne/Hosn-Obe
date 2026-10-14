@@ -457,3 +457,54 @@ describe("RoomManager gameplay", () => {
     expect(game().phase).toBe("play")
   })
 })
+
+
+describe("card emotes", () => {
+  function table() {
+    const result = setup()
+    result.rooms.addBot("s-host", 1, "normal")
+    result.rooms.start("s-host")
+    return result
+  }
+  it("attributes all four reactions to the authenticated player without changing gameplay", () => {
+    vi.useFakeTimers()
+    const { rooms, code, host } = table()
+    const before = JSON.stringify(rooms.getGame(code))
+    for (const emote of ["laughing", "angry", "crying", "gg"]) {
+      expect(rooms.sendEmote("s-host", emote)).toEqual({ code, event: { playerId: host.youId, emote } })
+      vi.advanceTimersByTime(3000)
+    }
+    expect(JSON.stringify(rooms.getGame(code))).toBe(before)
+  })
+  it("rejects unknown reactions, outsiders, spectators and lobby reactions", () => {
+    const lobby = setup()
+    expect(() => lobby.rooms.sendEmote("s-host", "gg")).toThrow(RoomError)
+    const { rooms, code } = table()
+    expect(() => rooms.sendEmote("outsider", "gg")).toThrow(RoomError)
+    rooms.joinRoom("spectator", code, "Watcher")
+    expect(() => rooms.sendEmote("spectator", "gg")).toThrow(RoomError)
+    for (const value of [null, {}, "wrong", { playerId: "another", emote: "gg" }])
+      expect(() => rooms.sendEmote("s-host", value)).toThrow("Unknown emote")
+    expect(() => rooms.sendEmote("s-host", "gg")).not.toThrow()
+  })
+  it("enforces cooldown across reconnects and accepts the next emote at the boundary", () => {
+    vi.useFakeTimers()
+    const { rooms, host } = table()
+    rooms.sendEmote("s-host", "laughing")
+    expect(() => rooms.sendEmote("s-host", "angry")).toThrow("Wait a moment")
+    rooms.disconnect("s-host")
+    rooms.resume("replacement", host.token)
+    vi.advanceTimersByTime(2999)
+    expect(() => rooms.sendEmote("replacement", "gg")).toThrow("Wait a moment")
+    vi.advanceTimersByTime(1)
+    expect(rooms.sendEmote("replacement", "gg").event.playerId).toBe(host.youId)
+  })
+  it("keeps cooldown independent for each player and room", () => {
+    const { rooms, code } = setup()
+    rooms.joinRoom("s-bob", code, "Bob")
+    rooms.setReady("s-bob", true)
+    rooms.start("s-host")
+    rooms.sendEmote("s-host", "gg")
+    expect(() => rooms.sendEmote("s-bob", "gg")).not.toThrow()
+  })
+})

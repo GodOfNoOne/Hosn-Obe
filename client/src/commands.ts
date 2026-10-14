@@ -1,4 +1,4 @@
-import type { BotLevel, GameAction } from "@hosn-obe/shared";
+import type { BotLevel, GameAction, EmoteId, EmoteEvent } from "@hosn-obe/shared";
 
 import { socket } from "./socket.js";
 
@@ -12,6 +12,8 @@ export interface RoomCommands {
   kick(seatIdx: number): void;
   start(): void;
   returnToLobby(): void;
+  sendEmote(emote: EmoteId): void;
+  subscribeEmotes(listener: (event: EmoteEvent) => void): () => void;
   act(action: GameAction): void;
 }
 
@@ -24,5 +26,10 @@ export const socketCommands: RoomCommands = {
   kick: (seatIdx) => socket.emit("room:kick", { seatIdx }),
   start: () => socket.emit("room:start"),
   returnToLobby: () => socket.emit("room:returnToLobby"),
+  sendEmote: (emote) => { socket.emit("game:emote", emote); },
+  subscribeEmotes: (listener) => {
+    socket.on("game:emote", listener);
+    return () => { socket.off("game:emote", listener); };
+  },
   act: (action) => socket.emit("game:action", action),
 };
