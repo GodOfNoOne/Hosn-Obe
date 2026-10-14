@@ -1,10 +1,17 @@
 apply plugin: 'com.android.application'
 
+def devBuild = project.hasProperty('devBuild')
+
 android {
     namespace = "com.godofnoone.hosnobe"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "com.godofnoone.hosnobe"
+        if (devBuild) {
+            applicationIdSuffix ".dev"
+            versionNameSuffix "-dev"
+        }
+        manifestPlaceholders = [appLabel: devBuild ? "Hosn Obe Dev" : "@string/app_name"]
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

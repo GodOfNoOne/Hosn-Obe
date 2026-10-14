@@ -224,6 +224,32 @@ alias for the host PC) and rebuild/reinstall the APK as in section 4.3/4.6.
 
 ## 7. Troubleshooting
 
+### Separate Render dev APK
+
+The `dev` branch can be tested against `https://hosn-obe-dev.onrender.com`.
+Build with a process-scoped URL rather than changing the production `.env`:
+
+```powershell
+$env:VITE_SERVER_URL = 'https://hosn-obe-dev.onrender.com'
+npm.cmd run build -w @hosn-obe/shared
+npm.cmd run build -w @hosn-obe/client
+Push-Location client
+npx.cmd cap sync android
+Push-Location android
+.\gradlew.bat assembleDebug -PdevBuild --no-daemon
+Pop-Location
+Pop-Location
+Remove-Item Env:VITE_SERVER_URL
+```
+
+Use the JDK 21 and Android SDK environment variables described above.
+The `-PdevBuild` flag sets package ID `com.godofnoone.hosnobe.dev` and app name
+`Hosn Obe Dev`, allowing installation alongside production. Without this flag,
+the existing production identity remains the default. Always rebuild and sync
+the web assets with the intended server URL before building another APK.
+Only push testing changes to `dev`; the production branch and Render service
+must remain separate.
+
 - **App says "offline" on the phone** → the WebView can't reach the server.
   Check: phone browser can open `http://<PC-IP>:3000/health`; firewall rule
   exists (4.4); `client/.env` has the **PC LAN IP** (not `localhost`/`10.0.2.2`);
