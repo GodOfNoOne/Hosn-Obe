@@ -114,11 +114,19 @@ is separate. Run `npm test` for server delivery and client reconnect/UI checks.
 Both the server and client need this feature deployed to use chat. The socket
 events are additive, so older clients can still play without chat.
 
-Dedicated bot seats join in with calm, playful table banter: introductions,
-knocks, round results, wins, and occasional replies to greetings, "gg", "ready",
-compliments, or bad-luck comments. They use curated lines based on public events;
-there is no AI API or hidden-card information in the dialogue. Only one bot
-speaks at a time, with a short delay and a 10-second room-wide cooldown. Bots
+Dedicated bot seats have a laid-back, slightly stoner voice: short casual lines,
+light trash talk, and occasional mild swearing. They react to public game events
+and sometimes join conversations about snacks, mood, bad luck, rematches, jokes,
+or the game. Addressing **Bot 2** selects that bot to answer. Short follow-ups
+like "really?" or "why?" use that player's recent exchange with the same bot,
+and expire after 45 seconds or a round change. Recognized casual remarks get a response
+about 65% of the time when the cooldown permits; directed questions get priority.
+
+Replies use local topic matching and curated lines, with no external AI service.
+They cannot hold arbitrary free-form conversations or reveal private hands.
+Swearing is occasional and never occurs in consecutive bot messages. Only one
+bot speaks at a time, with a short delay, a 10-second ambient cooldown, and a
+5-second cooldown for directed replies and follow-ups. Bots
 don't reply to each other, and stale remarks are dropped when a round changes.
 Bot messages have a **Bot** label and share the same bounded room history.
 Stand-ins for absent humans never chat under those players' names.

@@ -678,7 +678,9 @@ export class RoomManager {
     room.chat.push(message)
     if (room.chat.length > CHAT_LIMITS.history) room.chat.shift()
     this.updateBotChatter(room)
-    room.botChatter.hear(text)
+    const address = text.match(/\bbot\s*(\d+)\b/i)
+    const addressed = address ? room.seats.find(p => p?.isBot && p.id.startsWith("bot:") && p.name.toLowerCase() === `bot ${Number(address[1])}`) : undefined
+    room.botChatter.hear(text, playerId, addressed?.id)
     return { code: room.code, message: { ...message } }
   }
 
