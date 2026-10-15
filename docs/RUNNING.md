@@ -118,9 +118,18 @@ Dedicated bot seats have a laid-back, slightly stoner voice: short casual lines,
 light trash talk, and occasional mild swearing. They react to public game events
 and sometimes join conversations about snacks, mood, bad luck, rematches, jokes,
 or the game. Addressing **Bot 2** selects that bot to answer. Short follow-ups
-like "really?" or "why?" use that player's recent exchange with the same bot,
-and expire after 45 seconds or a round change. Recognized casual remarks get a response
-about 65% of the time when the cooldown permits; directed questions get priority.
+like "really?" or "why?" use that player's recent exchange with the same bot.
+Casual conversations last up to two minutes and survive new rounds; game-specific
+advice is cleared when the round changes. At a one-human table, ordinary sentences
+also get a response without naming a bot. At a shared table, bots are selective
+about joining in; direct addresses and ongoing conversations get priority.
+
+Directed replies wait for the cooldown instead of being discarded, and a newer
+message replaces an unsent reply. After roughly 40–75 seconds of quiet, a bot may
+ask the table about snacks, music, their day, or play style. Players can answer
+directly (for example, "Doritos", "Pink Floyd", or "reckless") without greetings
+or trigger phrases. The most recent question takes precedence. After two
+unanswered prompts, bots wait for human chat before starting another conversation.
 
 Replies use local topic matching and curated lines, with no external AI service.
 They cannot hold arbitrary free-form conversations or reveal private hands.

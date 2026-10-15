@@ -655,6 +655,13 @@ export class RoomManager {
     return this.rooms.get(code) ?? null
   }
 
+  botChatPulse(): void {
+    for (const room of this.rooms.values()) {
+      this.updateBotChatter(room)
+      room.botChatter.tick()
+    }
+  }
+
   chatHistory(socketId: string): { code: string; messages: ChatMessage[] } {
     const { room } = this.memberRoom(socketId)
     return { code: room.code, messages: room.chat.map(message => ({ ...message })) }
@@ -714,10 +721,13 @@ export class RoomManager {
         const actor = game.players[game.lastEvent.seat]
         const bot = bots.find(bot => bot.id === actor?.id)
         moment = { key, cue: bot ? "ownKnock" : "knock", speakerId: bot?.id }
+      } else if ((game.lastEvent.type === "swap" || game.lastEvent.type === "swapAll") && game.lastEvent.pool === "down") {
+        moment = { key, cue: "gamble" }
       }
     }
     room.botChatter.update({
       botIds: bots.map(bot => bot.id), active: humans(room).some(p => p.connected),
+      humanCount: humans(room).filter(p => p.connected).length,
       lobby: room.phase === "lobby",
       context: game ? `${room.gameRun}:${game.round}:${game.phase === "roundEnd" || game.phase === "gameEnd" ? game.phase : "active"}` : "lobby", moment,
     })

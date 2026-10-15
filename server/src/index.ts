@@ -53,6 +53,7 @@ io.use((socket, next) => {
 })
 
 const rooms = new RoomManager(event => io.to(event.code).emit("chat:message", event))
+setInterval(() => rooms.botChatPulse(), 5000).unref()
 
 /** Arm bot/turn/round timers, then push room + per-seat game state (with the turn countdown) to everyone. */
 function sync(code: string): void {
