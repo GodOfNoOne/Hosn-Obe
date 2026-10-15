@@ -5,7 +5,7 @@ import "./chat.css"
 
 /** Mounted once per online room so the conversation survives lobby/game changes. */
 export function RoomChat({ room, youId, connected }: { room: RoomState; youId: string | null; connected: boolean }) {
-  const [open, setOpen] = useState(room.phase === "lobby")
+  const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState("")
   const [unread, setUnread] = useState(0)
@@ -22,6 +22,10 @@ export function RoomChat({ room, youId, connected }: { room: RoomState; youId: s
   const cooldownTimer = useRef<ReturnType<typeof setTimeout>>()
   const log = useRef<HTMLDivElement>(null)
   const follow = useRef(true)
+  const popup = useRef<HTMLDialogElement>(null)
+  const launcher = useRef<HTMLButtonElement>(null)
+  const closeButton = useRef<HTMLButtonElement>(null)
+  const loadedHistory = useRef(false)
 
   function remember(message: ChatMessage, countUnread = false) {
     if (seen.current.has(message.id)) return
@@ -57,6 +61,11 @@ export function RoomChat({ room, youId, connected }: { room: RoomState; youId: s
         if (err || !result) { setHistoryError("Couldn't load chat. Try again."); return }
         if (!result.ok) { setHistoryError(result.error); return }
         if (result.code !== room.code) return
+        if (loadedHistory.current && !openRef.current) {
+          const missed = result.messages.filter(message => message.playerId !== youId && !seen.current.has(message.id)).length
+          if (missed) setUnread(count => count + missed)
+        }
+        loadedHistory.current = true
         seen.current = new Set([...result.messages.map(message => message.id), ...seen.current].slice(-CHAT_LIMITS.history * 2))
         const ids = new Set(result.messages.map(message => message.id))
         setMessages([...result.messages, ...liveDuringSync.filter(message => !ids.has(message.id))].slice(-CHAT_LIMITS.history))
@@ -71,13 +80,44 @@ export function RoomChat({ room, youId, connected }: { room: RoomState; youId: s
   }, [room.code, connected, youId, reload])
 
   useEffect(() => () => clearTimeout(cooldownTimer.current), [])
+  useEffect(() => {
+    if (!open) return
+    const overflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => { document.body.style.overflow = overflow }
+  }, [open])
+  useLayoutEffect(() => {
+    const dialog = popup.current
+    if (!dialog) return
+    if (open && !dialog.open) {
+      dialog.showModal()
+      closeButton.current?.focus()
+    } else if (!open && dialog.open) dialog.close()
+  }, [open])
+
+  useEffect(() => {
+    const viewport = window.visualViewport
+    const dialog = popup.current
+    if (!open || !viewport || !dialog) return
+    const resize = () => {
+      const keyboard = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+      dialog.style.setProperty("--chat-viewport-height", `${viewport.height}px`)
+      dialog.style.setProperty("--chat-keyboard-inset", `${keyboard}px`)
+      dialog.style.setProperty("--chat-bottom-gap", keyboard > 80 || viewport.height < 500 ? "12px" : "84px")
+    }
+    resize()
+    viewport.addEventListener("resize", resize)
+    viewport.addEventListener("scroll", resize)
+    return () => { viewport.removeEventListener("resize", resize); viewport.removeEventListener("scroll", resize) }
+  }, [open])
   useLayoutEffect(() => {
     if (open && follow.current && log.current) log.current.scrollTop = log.current.scrollHeight
   }, [messages, open])
 
-  function toggle() {
-    setOpen(!open)
-    if (!open) { setUnread(0); follow.current = true }
+  function show() {
+    setUnread(0)
+    follow.current = true
+    setOpen(true)
   }
 
   function send() {
@@ -101,14 +141,24 @@ export function RoomChat({ room, youId, connected }: { room: RoomState; youId: s
   }
 
   return <section className="room-chat" aria-label="Room chat">
-    <button className="chat-toggle" type="button" aria-expanded={open} aria-controls="room-chat-panel" onClick={toggle}>
-      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 4V6a2 2 0 0 1 2-2Z" /><path d="M7 9h10M7 13h6" /></svg>
-      <span>Room chat</span>
-      {unread > 0 && <span className="chat-unread" aria-label={`${unread} unread messages`}>{unread > 99 ? "99+" : unread}</span>}
-      <span className="chat-chevron" aria-hidden="true">{open ? "−" : "+"}</span>
+    <button ref={launcher} className="chat-launcher" type="button" aria-haspopup="dialog" aria-expanded={open} aria-controls="room-chat-popup"
+      aria-label={`Open room chat${unread ? `, ${unread} unread ${unread === 1 ? "message" : "messages"}` : ""}`} title="Room chat" onClick={show}>
+      <svg width="25" height="25" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 4V6a2 2 0 0 1 2-2Z" /><path d="M7 9h10M7 13h6" /></svg>
+      {unread > 0 && <span className="chat-unread" aria-hidden="true" />}
     </button>
-    <div id="room-chat-panel" hidden={!open}>
-      <p className="chat-caption">Everyone in this room can read and send messages.</p>
+    <dialog ref={popup} className="chat-popup" id="room-chat-popup" aria-labelledby="room-chat-title" aria-describedby="room-chat-caption"
+      onClose={() => { setOpen(false); launcher.current?.focus() }}
+      onCancel={event => { event.preventDefault(); setOpen(false) }}
+      onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false) } }}
+      onClick={event => { if (event.target === event.currentTarget) setOpen(false) }}>
+      <div className="chat-popup-content">
+      <header className="chat-header">
+        <div><h2 id="room-chat-title">Room chat</h2><span className="chat-room-code">Room {room.code}</span></div>
+        <button ref={closeButton} className="chat-close" type="button" aria-label="Close room chat" onClick={() => setOpen(false)}>
+          <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
+        </button>
+      </header>
+      <p className="chat-caption" id="room-chat-caption">Everyone in this room can read and send messages.</p>
       <div className="chat-log" ref={log} role="log" aria-label="Messages" aria-live={open ? "polite" : "off"} aria-relevant="additions" tabIndex={0}
         onScroll={() => { if (log.current) follow.current = log.current.scrollHeight - log.current.scrollTop - log.current.clientHeight < 32 }}>
         {messages.length === 0 && <p className="chat-empty">{connected && !ready && !historyError ? "Loading chat…" : "Say hello to the table."}</p>}
@@ -135,6 +185,7 @@ export function RoomChat({ room, youId, connected }: { room: RoomState; youId: s
         <div className="chat-compose-meta"><span>{!connected ? "Messages will be available after reconnecting." : cooldown ? "Wait a moment before sending again." : "Enter to send · Shift+Enter for a new line"}</span><span>{draft.length}/{CHAT_LIMITS.maxLength}</span></div>
         {error && <p className="chat-error" role="alert">{error}</p>}
       </form>
-    </div>
+      </div>
+    </dialog>
   </section>
 }

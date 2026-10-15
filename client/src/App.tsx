@@ -140,6 +140,8 @@ export function App() {
 
   const backRef = useRef(() => {})
   backRef.current = () => {
+    const dialog = document.querySelector<HTMLDialogElement>("dialog[open]")
+    if (dialog) { dialog.close(); return }
     if (practice || room) confirmLeave()
     else if (screen !== "home") setScreen("home")
     else exitApp()

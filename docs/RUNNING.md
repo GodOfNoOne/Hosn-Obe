@@ -94,17 +94,20 @@ To play "multiplayer" on one PC:
 
 ### Room chat
 
-Online rooms have a collapsible **Room chat** panel below the lobby or game.
+Online rooms have a circular **Room chat** button at the bottom right. It opens
+a popup over the lobby or game, with a small red dot when new messages arrive.
 Players and spectators share one conversation across starting a game, returning
 to the lobby, and reconnecting. The panel shows author names, local timestamps,
-and an unread count while collapsed. Enter sends; Shift+Enter adds a new line.
+and the unread count in the button's accessible label. Opening chat clears the
+dot. Close with the X, a tap outside, Escape, or Android Back; your draft is kept.
+The popup adapts to the viewport and keyboard. Enter sends; Shift+Enter adds a new line.
 Messages are plain text, limited to 300 characters and one message per second.
 The latest 50 messages are kept in memory while the room exists; restarting the
 server or closing the room clears them. Practice and tutorial do not have chat.
 
 To check it manually, join the same room in two tabs, send messages from both,
 start a game, then return to the lobby. The conversation should remain. Close
-chat in one tab and send from the other to check the unread badge. Reconnect a
+chat in one tab and send from the other to check the red notification dot. Reconnect a
 tab to check missed messages, and join a different room to confirm its history
 is separate. Run `npm test` for server delivery and client reconnect/UI checks.
 
