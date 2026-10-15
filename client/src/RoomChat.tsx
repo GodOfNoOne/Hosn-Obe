@@ -1,0 +1,139 @@
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { CHAT_LIMITS, type ChatEvent, type ChatMessage, type RoomState } from "@hosn-obe/shared"
+import { socket } from "./socket.js"
+import "./chat.css"
+
+/** Mounted once per online room so the conversation survives lobby/game changes. */
+export function RoomChat({ room, youId, connected }: { room: RoomState; youId: string | null; connected: boolean }) {
+  const [open, setOpen] = useState(room.phase === "lobby")
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [draft, setDraft] = useState("")
+  const [unread, setUnread] = useState(0)
+  const [ready, setReady] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [cooldown, setCooldown] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const [reload, setReload] = useState(0)
+  const openRef = useRef(open)
+  openRef.current = open
+  const seen = useRef(new Set<string>())
+  const sendVersion = useRef(0)
+  const cooldownTimer = useRef<ReturnType<typeof setTimeout>>()
+  const log = useRef<HTMLDivElement>(null)
+  const follow = useRef(true)
+
+  function remember(message: ChatMessage, countUnread = false) {
+    if (seen.current.has(message.id)) return
+    seen.current.add(message.id)
+    if (seen.current.size > CHAT_LIMITS.history * 2) {
+      const oldest = seen.current.values().next().value
+      if (oldest) seen.current.delete(oldest)
+    }
+    setMessages(previous => [...previous, message].slice(-CHAT_LIMITS.history))
+    if (countUnread && !openRef.current && message.playerId !== youId) setUnread(count => count + 1)
+  }
+
+  useEffect(() => {
+    let active = true
+    let syncing = true
+    const liveDuringSync: ChatMessage[] = []
+    setSending(false)
+    setReady(false)
+    setHistoryError(null)
+    function onMessage(event: ChatEvent) {
+      if (event.code !== room.code) return
+      if (syncing) {
+        liveDuringSync.push(event.message)
+        if (liveDuringSync.length > CHAT_LIMITS.history) liveDuringSync.shift()
+      }
+      remember(event.message, true)
+    }
+    socket.on("chat:message", onMessage)
+    if (connected && socket.connected) {
+      socket.timeout(8000).emit("chat:history", (err, result) => {
+        if (!active) return
+        syncing = false
+        if (err || !result) { setHistoryError("Couldn't load chat. Try again."); return }
+        if (!result.ok) { setHistoryError(result.error); return }
+        if (result.code !== room.code) return
+        seen.current = new Set([...result.messages.map(message => message.id), ...seen.current].slice(-CHAT_LIMITS.history * 2))
+        const ids = new Set(result.messages.map(message => message.id))
+        setMessages([...result.messages, ...liveDuringSync.filter(message => !ids.has(message.id))].slice(-CHAT_LIMITS.history))
+        setReady(true)
+      })
+    }
+    return () => {
+      active = false
+      sendVersion.current++
+      socket.off("chat:message", onMessage)
+    }
+  }, [room.code, connected, youId, reload])
+
+  useEffect(() => () => clearTimeout(cooldownTimer.current), [])
+  useLayoutEffect(() => {
+    if (open && follow.current && log.current) log.current.scrollTop = log.current.scrollHeight
+  }, [messages, open])
+
+  function toggle() {
+    setOpen(!open)
+    if (!open) { setUnread(0); follow.current = true }
+  }
+
+  function send() {
+    if (!draft.trim() || !ready || sending || cooldown || !connected || !socket.connected) return
+    const version = ++sendVersion.current
+    setError(null)
+    setSending(true)
+    socket.timeout(8000).emit("chat:send", { text: draft }, (err, result) => {
+      if (version !== sendVersion.current) return
+      setSending(false)
+      if (err || !result) { setError("Couldn't confirm delivery. Check chat before trying again."); return }
+      if (!result.ok) { setError(result.error); return }
+      remember(result.message)
+      setDraft("")
+      follow.current = true
+      if (log.current) log.current.scrollTop = log.current.scrollHeight
+      setCooldown(true)
+      clearTimeout(cooldownTimer.current)
+      cooldownTimer.current = setTimeout(() => setCooldown(false), CHAT_LIMITS.cooldownMs)
+    })
+  }
+
+  return <section className="room-chat" aria-label="Room chat">
+    <button className="chat-toggle" type="button" aria-expanded={open} aria-controls="room-chat-panel" onClick={toggle}>
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 4V6a2 2 0 0 1 2-2Z" /><path d="M7 9h10M7 13h6" /></svg>
+      <span>Room chat</span>
+      {unread > 0 && <span className="chat-unread" aria-label={`${unread} unread messages`}>{unread > 99 ? "99+" : unread}</span>}
+      <span className="chat-chevron" aria-hidden="true">{open ? "−" : "+"}</span>
+    </button>
+    <div id="room-chat-panel" hidden={!open}>
+      <p className="chat-caption">Everyone in this room can read and send messages.</p>
+      <div className="chat-log" ref={log} role="log" aria-label="Messages" aria-live={open ? "polite" : "off"} aria-relevant="additions" tabIndex={0}
+        onScroll={() => { if (log.current) follow.current = log.current.scrollHeight - log.current.scrollTop - log.current.clientHeight < 32 }}>
+        {messages.length === 0 && <p className="chat-empty">{connected && !ready && !historyError ? "Loading chat…" : "Say hello to the table."}</p>}
+        {messages.map(message => <article className={`chat-message${message.playerId === youId ? " chat-message--you" : ""}`} key={message.id}>
+          <div className="chat-meta"><bdi className="chat-author">{message.playerId === youId ? "You" : message.name}</bdi>
+            <time dateTime={new Date(message.sentAt).toISOString()}>{new Date(message.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
+          </div>
+          <p dir="auto">{message.text}</p>
+        </article>)}
+      </div>
+      {historyError && <div className="chat-feedback"><p role="alert">{historyError}</p><button type="button" className="secondary" disabled={!connected} onClick={() => setReload(value => value + 1)}>Retry chat</button></div>}
+      <form className="chat-compose" onSubmit={event => { event.preventDefault(); send() }}>
+        <label className="chat-input-label" htmlFor="chat-message">Message</label>
+        <div className="chat-compose-row">
+          <textarea id="chat-message" rows={2} dir="auto" value={draft} maxLength={CHAT_LIMITS.maxLength}
+            disabled={!connected || sending} placeholder={connected ? "Message the room…" : "Reconnecting…"}
+            onChange={event => { setDraft(event.target.value); setError(null) }}
+            onKeyDown={event => {
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send() }
+            }} />
+          <button type="submit" disabled={!connected || !ready || sending || cooldown || !draft.trim()}>{sending ? "Sending…" : "Send"}</button>
+        </div>
+        <div className="chat-compose-meta"><span>{!connected ? "Messages will be available after reconnecting." : cooldown ? "Wait a moment before sending again." : "Enter to send · Shift+Enter for a new line"}</span><span>{draft.length}/{CHAT_LIMITS.maxLength}</span></div>
+        {error && <p className="chat-error" role="alert">{error}</p>}
+      </form>
+    </div>
+  </section>
+}

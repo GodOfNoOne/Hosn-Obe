@@ -11,6 +11,7 @@ import { randomBytes, randomInt, randomUUID } from "node:crypto"
 import {
   applyAction,
   BOT_LEVELS,
+  CHAT_LIMITS,
   chooseBotAction,
   convertToBot,
   convertToHuman,
@@ -22,6 +23,7 @@ import {
   startRound,
   viewFor,
   type BotLevel,
+  type ChatMessage,
   type GameAction,
   type GameState,
   type GameView,
@@ -48,9 +50,11 @@ interface Member {
   /** Secret that lets a new connection reclaim this seat. */
   token: string
   socketId: string | null
+  lastChatAt: number | null
 }
 
 interface ServerRoom extends RoomState {
+  chat: ChatMessage[]
   members: Map<string, Member>
   game: GameState | null
   timer: ReturnType<typeof setTimeout> | null
@@ -203,6 +207,7 @@ export class RoomManager {
       seats: Array(size).fill(null),
       spectators: [],
       phase: "lobby",
+      chat: [],
       members: new Map(),
       game: null,
       timer: null,
@@ -640,6 +645,31 @@ export class RoomManager {
     return this.rooms.get(code) ?? null
   }
 
+  chatHistory(socketId: string): { code: string; messages: ChatMessage[] } {
+    const { room } = this.memberRoom(socketId)
+    return { code: room.code, messages: room.chat.map(message => ({ ...message })) }
+  }
+
+  sendChat(socketId: string, raw: unknown): { code: string; message: ChatMessage } {
+    const { room, playerId } = this.memberRoom(socketId)
+    const member = room.members.get(playerId)
+    const player = findPlayer(room, playerId)
+    if (!member || member.socketId !== socketId || !player || player.isBot || !player.connected)
+      throw new RoomError("You are not in a room.")
+    if (typeof raw !== "string" || raw.length > CHAT_LIMITS.maxLength)
+      throw new RoomError(`Messages must be ${CHAT_LIMITS.maxLength} characters or fewer.`)
+    const text = raw.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").trim()
+    if (!text) throw new RoomError("Write a message first.")
+    const now = Date.now()
+    if (member.lastChatAt !== null && now - member.lastChatAt < CHAT_LIMITS.cooldownMs)
+      throw new RoomError("Wait a moment before sending another message.")
+    const message: ChatMessage = { id: randomUUID(), playerId, name: player.name, text, sentAt: now }
+    member.lastChatAt = now
+    room.chat.push(message)
+    if (room.chat.length > CHAT_LIMITS.history) room.chat.shift()
+    return { code: room.code, message: { ...message } }
+  }
+
   getGame(code: string): GameState | null {
     return this.rooms.get(code)?.game ?? null
   }
@@ -671,7 +701,7 @@ export class RoomManager {
       ready: false,
       connected: true,
     }
-    room.members.set(id, { token, socketId })
+    room.members.set(id, { token, socketId, lastChatAt: null })
     const session = { code: room.code, playerId: id }
     this.sockets.set(socketId, session)
     this.tokens.set(token, session)

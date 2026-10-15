@@ -24,6 +24,7 @@ import {
 } from "@hosn-obe/shared"
 
 import { log } from "./log.js"
+import { registerChat } from "./chat.js"
 import { RoomError, RoomManager } from "./rooms.js"
 
 const PORT = Number(process.env.PORT) || 3000
@@ -83,6 +84,8 @@ io.on("connection", (socket) => {
   socket.on("error", (err) => {
     socket.emit("room:error", { message: err.message })
   })
+
+  registerChat(io, socket, rooms)
 
   function leaveCurrent(): void {
     const left = rooms.leaveRoom(socket.id)

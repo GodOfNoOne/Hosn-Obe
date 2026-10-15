@@ -92,6 +92,25 @@ To play "multiplayer" on one PC:
 
 ---
 
+### Room chat
+
+Online rooms have a collapsible **Room chat** panel below the lobby or game.
+Players and spectators share one conversation across starting a game, returning
+to the lobby, and reconnecting. The panel shows author names, local timestamps,
+and an unread count while collapsed. Enter sends; Shift+Enter adds a new line.
+Messages are plain text, limited to 300 characters and one message per second.
+The latest 50 messages are kept in memory while the room exists; restarting the
+server or closing the room clears them. Practice and tutorial do not have chat.
+
+To check it manually, join the same room in two tabs, send messages from both,
+start a game, then return to the lobby. The conversation should remain. Close
+chat in one tab and send from the other to check the unread badge. Reconnect a
+tab to check missed messages, and join a different room to confirm its history
+is separate. Run `npm test` for server delivery and client reconnect/UI checks.
+
+Both the server and client need this feature deployed to use chat. The socket
+events are additive, so older clients can still play without chat.
+
 ## 4. Simulate on a real Android phone
 
 The phone must be on the **same Wi-Fi/LAN** as the PC so it can reach the server.
