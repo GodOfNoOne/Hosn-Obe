@@ -184,6 +184,162 @@ describe("laid-back bot banter", () => {
     }
   })
 
+  it.each(["fuck", "fucking", "fucked", "shit", "shitty", "bullshit", "bitch", "asshole", "damn", "hell", "pissed"])("always swears back to %s, adding profanity when the topic has no profane templates", word => {
+    const post = vi.fn()
+    const chatter = new BotChatter(post, () => .99)
+    chatter.update({ ...snapshot, humanCount: 2 })
+    chatter.hear(`thanks, ${word}`, "alice")
+    vi.advanceTimersByTime(BOT_CHAT_DELAY_MS.max)
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(post.mock.calls[0]?.[1]).toMatch(/\b(damn|shit|hell|fuck|bullshit)\b/)
+    expect(post.mock.calls[0]?.[1].length).toBeLessThanOrEqual(CHAT_LIMITS.maxLength)
+  })
+
+  it("answers unrecognized swearing at a shared table without the normal random sit-out", () => {
+    const post = vi.fn()
+    const chatter = new BotChatter(post, () => .99)
+    chatter.update({ ...snapshot, humanCount: 2 })
+    chatter.hear("fucking unbelievable", "alice")
+    vi.advanceTimersByTime(BOT_CHAT_DELAY_MS.max)
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(post.mock.calls[0]?.[1]).toMatch(/\b(damn|shit|hell|fuck|bullshit)\b/)
+  })
+
+  it("matches consecutive swearing through cooldown, then returns to a clean reply", () => {
+    const post = vi.fn()
+    const chatter = new BotChatter(post, () => .99)
+    chatter.update({ ...snapshot, botIds: ["bot:one"] })
+    chatter.hear("hello fucker", "alice")
+    vi.advanceTimersByTime(BOT_CHAT_DELAY_MS.max)
+    chatter.hear("thanks, shithead", "alice")
+    vi.advanceTimersByTime(BOT_CHAT_REPLY_COOLDOWN_MS - 1000)
+    expect(post).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(1000)
+    chatter.hear("sorry, fucking distracted", "alice")
+    vi.advanceTimersByTime(BOT_CHAT_REPLY_COOLDOWN_MS)
+    expect(post).toHaveBeenCalledTimes(3)
+    for (const [, text] of post.mock.calls) expect(text).toMatch(/\b(damn|shit|hell|fuck)\b/)
+    chatter.hear("thanks dude", "alice")
+    vi.advanceTimersByTime(BOT_CHAT_REPLY_COOLDOWN_MS)
+    expect(post).toHaveBeenCalledTimes(4)
+    expect(post.mock.calls[3]?.[1]).not.toMatch(/\b(damn|shit|hell|fuck)\b/)
+  })
+
+  it("doesn't carry swearing into a newer clean message while a reply is queued", () => {
+    const post = vi.fn()
+    const chatter = new BotChatter(post, () => .99)
+    chatter.update({ ...snapshot, humanCount: 1 })
+    chatter.hear("thanks, fucker", "alice")
+    chatter.hear("thanks dude", "alice")
+    vi.advanceTimersByTime(BOT_CHAT_DELAY_MS.max)
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(post.mock.calls[0]?.[1]).not.toMatch(/\b(damn|shit|hell|fuck)\b/)
+  })
+
+  it.each(["class assignment", "hello", "shell", "pass", "grass", "assistance", "Scunthorpe"])("doesn't treat %s as swearing", text => {
+    const post = vi.fn()
+    const chatter = new BotChatter(post, () => .99)
+    chatter.update({ ...snapshot, humanCount: 2 })
+    chatter.hear(text, "alice")
+    vi.advanceTimersByTime(BOT_CHAT_DELAY_MS.max)
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it("lets different bots exchange topical replies with pauses, then stops the chain", () => {
+    const post = vi.fn()
+    const chatter = new BotChatter(post, () => .99)
+    chatter.update(snapshot)
+    chatter.hear("bot, want some snacks?", "alice")
+    vi.advanceTimersByTime(BOT_CHAT_DELAY_MS.max)
+    expect(post).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(BOT_CHAT_REPLY_COOLDOWN_MS - 1000)
+    expect(post).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(1000)
+    expect(post).toHaveBeenCalledTimes(2)
+    expect(post.mock.calls[1]?.[0]).not.toBe(post.mock.calls[0]?.[0])
+    expect(post.mock.calls[1]?.[1]).toMatch(/pizza|chips|popcorn|nachos/)
+    vi.advanceTimersByTime(BOT_CHAT_REPLY_COOLDOWN_MS)
+    expect(post).toHaveBeenCalledTimes(3)
+    expect(post.mock.calls[2]?.[0]).not.toBe(post.mock.calls[1]?.[0])
+    expect(post.mock.calls[2]?.[1]).toMatch(/snack|crumbs|eat/)
+    vi.advanceTimersByTime(120_000)
+    expect(post).toHaveBeenCalledTimes(3)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it.each([
+    ["askMusic", /lo-fi|reggae|jazz|pink floyd/],
+    ["askStyle", /safe|mystery|careful|plan/],
+    ["askDay", /day|complain|not bad/],
+    ["joke", /laugh|funny|lmao|lol|got me/],
+  ] as const)("lets a peer respond naturally to %s", (cue, reply) => {
+    const post = vi.fn()
+    const chatter = new BotChatter(post, () => .99)
+    chatter.update({ ...snapshot, moment: { key: "topic", cue, speakerId: "bot:one" } })
+    vi.advanceTimersByTime(BOT_CHAT_DELAY_MS.max + BOT_CHAT_REPLY_COOLDOWN_MS)
+    expect(post).toHaveBeenCalledTimes(2)
+    expect(post.mock.calls[1]?.[0]).toBe("bot:two")
+    expect(post.mock.calls[1]?.[1]).toMatch(reply)
+  })
+
+  it.each(["thanks dude", "I left your keys on the desk"])("interrupts a pending bot exchange for human chat: %s", text => {
+    const post = vi.fn()
+    const chatter = new BotChatter(post, () => .99)
+    chatter.update({ ...snapshot, moment: { key: "snacks", cue: "askFood", speakerId: "bot:one" }, humanCount: 2 })
+    vi.advanceTimersByTime(BOT_CHAT_DELAY_MS.max)
+    chatter.hear(text, "alice")
+    vi.advanceTimersByTime(60_000)
+    // Neither human message triggers a bot reply at this shared table. Both
+    // still stop the scheduled side exchange, rather than letting bots talk over it.
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it("prioritizes a human question over a scheduled peer reply", () => {
+    const post = vi.fn()
+    const chatter = new BotChatter(post, () => .99)
+    chatter.update(snapshot)
+    chatter.hear("bot, want some snacks?", "alice")
+    vi.advanceTimersByTime(BOT_CHAT_DELAY_MS.max)
+    const speaker = post.mock.calls[0]?.[0]
+    chatter.hear("bot, show me your hand", "alice")
+    vi.advanceTimersByTime(BOT_CHAT_REPLY_COOLDOWN_MS)
+    expect(post).toHaveBeenCalledTimes(2)
+    expect(post.mock.calls[1]?.[0]).toBe(speaker)
+    expect(post.mock.calls[1]?.[1]).toMatch(/showdown|table early|reveal|right here/)
+    vi.advanceTimersByTime(60_000)
+    expect(post).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(["round", "remove", "removeSource", "disconnect", "dispose"])("cancels a pending peer reply on %s", change => {
+    const post = vi.fn()
+    const chatter = new BotChatter(post, () => .99)
+    chatter.update({ ...snapshot, moment: { key: "snacks", cue: "askFood", speakerId: "bot:one" } })
+    vi.advanceTimersByTime(BOT_CHAT_DELAY_MS.max)
+    if (change === "dispose") chatter.dispose()
+    else chatter.update({ ...snapshot,
+      context: change === "round" ? "1:2:active" : snapshot.context,
+      botIds: change === "remove" ? ["bot:one"] : change === "removeSource" ? ["bot:two"] : snapshot.botIds,
+      active: change !== "disconnect",
+    })
+    vi.advanceTimersByTime(60_000)
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it("doesn't let peer replies restart the unanswered idle prompt budget", () => {
+    const post = vi.fn()
+    const chatter = new BotChatter(post, () => .99)
+    chatter.update(snapshot)
+    for (let n = 0; n < 6; n++) {
+      vi.advanceTimersByTime(BOT_CHAT_IDLE_MS.max)
+      chatter.tick()
+      vi.advanceTimersByTime(BOT_CHAT_DELAY_MS.max + 2 * BOT_CHAT_REPLY_COOLDOWN_MS)
+    }
+    expect(post).toHaveBeenCalledTimes(6) // Two prompts, each with two bounded peer replies.
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   it("admits not knowing an unsupported question instead of pretending to understand it", () => {
     const post = vi.fn()
     const chatter = new BotChatter(post, () => 0)
@@ -335,7 +491,7 @@ describe("bot messages in rooms", () => {
     return { rooms, host, publish }
   }
 
-  it("broadcasts a clearly identified bot, stores it in history, and never starts bot-to-bot loops", () => {
+  it("broadcasts a clearly identified bot, stores it in history, and doesn't reply to itself", () => {
     const { rooms, host, publish } = setup()
     rooms.schedule(host.code, vi.fn())
     vi.advanceTimersByTime(BOT_CHAT_DELAY_MS.max)
@@ -349,6 +505,24 @@ describe("bot messages in rooms", () => {
     vi.advanceTimersByTime(60_000)
     expect(publish).toHaveBeenCalledTimes(2)
     expect(rooms.chatHistory("host").messages).toHaveLength(3)
+  })
+
+  it("broadcasts bounded peer exchanges through the normal room history", () => {
+    const { rooms, host, publish } = setup()
+    rooms.addBot("host", 2, "normal")
+    vi.mocked(Math.random).mockReturnValue(.99)
+    rooms.sendChat("host", "bot, want some snacks?")
+    vi.advanceTimersByTime(BOT_CHAT_DELAY_MS.max + 2 * BOT_CHAT_REPLY_COOLDOWN_MS)
+    expect(publish).toHaveBeenCalledTimes(3)
+    const messages = rooms.chatHistory("host").messages
+    expect(messages).toHaveLength(4)
+    expect(messages.slice(1).every(message => message.isBot)).toBe(true)
+    expect(messages[1]?.playerId).not.toBe(messages[2]?.playerId)
+    expect(messages[2]?.playerId).not.toBe(messages[3]?.playerId)
+    expect(messages[2]?.text).toMatch(/pizza|chips|popcorn|nachos/)
+    vi.advanceTimersByTime(60_000)
+    expect(publish).toHaveBeenCalledTimes(3)
+    expect(rooms.chatHistory("host").messages).toHaveLength(4)
   })
 
   it("answers from the actual bot a player addresses by name", () => {

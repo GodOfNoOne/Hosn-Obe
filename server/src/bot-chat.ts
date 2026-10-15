@@ -4,7 +4,7 @@ export type BotChatCue = "join" | "start" | "round" | "knock" | "ownKnock" | "re
   | "foodFollowUp" | "tiltFollowUp" | "adviceFollowUp" | "chillFollowUp"
   | "askFood" | "askMusic" | "askStyle" | "askDay" | "foodAnswer" | "foodNone" | "music" | "musicAnswer" | "musicMore"
   | "risky" | "careful" | "styleAnswer" | "tellMore" | "conversation" | "story" | "agree" | "disagree" | "weather" | "work" | "swapTalk" | "gamble"
-  | "joke" | "checkIn"
+  | "joke" | "checkIn" | "peerFood" | "peerMusic" | "peerStyle" | "peerDay"
 export const BOT_CHAT_COOLDOWN_MS = 10_000
 export const BOT_CHAT_REPLY_COOLDOWN_MS = 5000
 export const BOT_CHAT_DELAY_MS = { min: 900, max: 1800 }
@@ -12,7 +12,7 @@ export const BOT_CHAT_REPLY_CHANCE = .65
 export const BOT_CHAT_IDLE_MS = { min: 40_000, max: 70_000 }
 const FOLLOW_UP_MS = 120_000
 type Question = "food" | "music" | "style" | "day" | "story"
-const swear = /\b(damn|shit|bullshit|hell|ass|assholes?|smartass)\b/i
+const swear = /\b(damn(?:ed|it)?|shit(?:s|ty|ting|ted|heads?)?|bullshit|dipshits?|hell|ass|assholes?|smartass|fuck(?:s|ed|in(?:g)?|er|ers)?|motherfuck(?:er|ers|ing)?|bitch(?:es|ing|y)?|bastards?|crap|piss(?:ed|ing)?)\b/i
 
 const lines: Record<BotChatCue, readonly string[]> = {
   join: ["yo, scoot over. i'm in", "what's good, table", "alright, let's play a few", "i'm here. got distracted for a sec", "yo. who's dealing?", "alright, let's shuffle this shit"],
@@ -73,6 +73,10 @@ const lines: Record<BotChatCue, readonly string[]> = {
   gamble: ["straight into the mystery pile, huh", "okay, taking the scenic route", "that's one way to keep things interesting", "hell with knowing what you're getting, i guess"],
   joke: ["i had a plan for that hand. anyway, does anyone remember it?", "i'm not saying my luck is bad, but the deck just apologized", "i've got two strategies: act confident, then ask for a rematch", "i came here to win or eat snacks. we're currently down to snacks"],
   checkIn: ["yeah, i'm here. what's up?", "still here, dude. what're we talking about?", "i'm here. got caught watching the cards for a sec", "yeah dude. you wanna talk or play another hand?"],
+  peerFood: ["pizza for me. no contest", "i'm voting chips. minimal commitment", "popcorn. though i will absolutely spill it", "nachos, if someone else is making them"],
+  peerMusic: ["lo-fi for me. suits my attention span", "a little reggae would work", "something mellow. jazz, maybe", "pink floyd. let the hand get weird"],
+  peerStyle: ["i play it safe until i get bored. so, briefly", "mystery pile. curiosity keeps winning", "i'd say careful, but the evidence is mixed", "my plan is to look like i have a plan"],
+  peerDay: ["pretty quiet day here. needed a few cards", "can't complain. well, i can, but i'll spare you", "slow day. this is a decent way to end it", "not bad. snack situation could be better"],
 }
 
 const questions: Partial<Record<BotChatCue, Question>> = {
@@ -80,6 +84,13 @@ const questions: Partial<Record<BotChatCue, Question>> = {
   musicMore: "music", work: "day", tellMore: "story", story: "day", conversation: "story", disagree: "story",
 }
 const gameTopics = new Set<BotChatCue>(["advice", "adviceFollowUp", "handQuestion", "swapTalk"])
+const peerReplies: Partial<Record<BotChatCue, BotChatCue>> = {
+  askFood: "peerFood", askMusic: "peerMusic", music: "peerMusic", askStyle: "peerStyle", askDay: "peerDay",
+  join: "hello", ownKnock: "knock", win: "gg", loss: "unlucky", joke: "laugh", brag: "tease",
+  food: "peerFood", foodAnswer: "foodFollowUp", peerFood: "foodFollowUp", peerMusic: "agree",
+  peerStyle: "tease", peerDay: "chillFollowUp", nice: "agree", goodMood: "agree", laugh: "chillFollowUp",
+}
+type ReplyOptions = { forceSwear?: boolean; exchangeDepth?: number; exchangeFrom?: string }
 
 function answer(question: Question, text: string): { cue: BotChatCue; choice?: string } {
   const value = normalize(text)
@@ -166,9 +177,10 @@ export class BotChatter {
   private known = new Set<string>()
   private observed: string | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
-  private pending: { botId: string; cue: BotChatCue; context?: string; priority: number; replyTo?: string; choice?: string; initiative?: boolean } | null = null
+  private pending: { botId: string; cue: BotChatCue; context?: string; priority: number; replyTo?: string; choice?: string; initiative?: boolean } & ReplyOptions | null = null
   private lastAt: number | null = null
   private lastSpeaker: string | null = null
+  private lastWasSwear = false
   private recentLines: string[] = []
   private replies = new Map<string, { cue: BotChatCue; botId: string; at: number; awaiting?: Question; context?: string }>()
   private invitation: { question: Question; botId: string; at: number } | null = null
@@ -193,7 +205,8 @@ export class BotChatter {
       this.nextInitiativeAt = this.nextIdle()
     }
     if (!snapshot.active || !snapshot.botIds.length || (this.pending &&
-      ((this.pending.context && this.pending.context !== snapshot.context) || !this.known.has(this.pending.botId)))) this.cancel()
+      ((this.pending.context && this.pending.context !== snapshot.context) || !this.known.has(this.pending.botId) ||
+        (this.pending.exchangeFrom && !this.known.has(this.pending.exchangeFrom))))) this.cancel()
     if (snapshot.moment && snapshot.moment.key !== this.observed) {
       this.observed = snapshot.moment.key
       this.queue(snapshot.moment.cue, 2, snapshot.moment.speakerId)
@@ -204,6 +217,9 @@ export class BotChatter {
     this.unansweredPrompts = 0
     this.nextInitiativeAt = this.nextIdle()
     const value = normalize(text)
+    const forceSwear = swear.test(value)
+    // A human message always interrupts a side conversation between bots.
+    if (this.pending?.exchangeDepth) this.cancel()
     const record = playerId ? this.replies.get(playerId) : undefined
     const previous = record && Date.now() - record.at <= FOLLOW_UP_MS ? record : undefined
     const invitation = this.invitation && Date.now() - this.invitation.at <= FOLLOW_UP_MS ? this.invitation : undefined
@@ -221,7 +237,7 @@ export class BotChatter {
     if (answering?.cue === "musicMore" && previous?.cue === "musicMore") answering.cue = "chillFollowUp"
     let cue = answering?.cue ?? (addressed && value.includes("?") && topic === "hello" ? "unknown"
       : topic ?? (continuing ? (/^(no|nope|nah)[?!. ]*$/.test(value) ? "disagree" : /^(yes|yep|yeah|right|exactly|true)[?!. ]*$/.test(value) ? "agree" : followUp(previous.cue))
-        : addressed && value.includes("?") ? "unknown" : previous || this.snapshot.humanCount === 1 ? "conversation" : null))
+        : addressed && value.includes("?") ? "unknown" : previous || this.snapshot.humanCount === 1 ? "conversation" : forceSwear ? "tilt" : null))
     let choice = answering?.choice
     if (topic === "food" && !answering) {
       const food = answer("food", text)
@@ -232,9 +248,9 @@ export class BotChatter {
     // If the topic changed before an answer was sent, drop that old answer too.
     if (!cue && playerId && this.pending?.replyTo === playerId) this.cancel()
     if (!cue) return
-    const directed = addressed || continuing || !!answering || !!previous || this.snapshot.humanCount === 1 || ["howAreYou", "identity", "handQuestion", "advice", "joke", "checkIn"].includes(cue)
+    const directed = forceSwear || addressed || continuing || !!answering || !!previous || this.snapshot.humanCount === 1 || ["howAreYou", "identity", "handQuestion", "advice", "joke", "checkIn"].includes(cue)
     if (!directed && this.random() >= BOT_CHAT_REPLY_CHANCE) return
-    this.queue(cue, 3, addressedBotId ?? (answering ? question?.botId : previous?.botId), playerId, directed, choice)
+    this.queue(cue, 3, addressedBotId ?? (answering ? question?.botId : previous?.botId), playerId, directed, choice, false, { forceSwear })
     if (answering) this.invitation = null
   }
 
@@ -251,7 +267,7 @@ export class BotChatter {
 
   private nextIdle() { return Date.now() + BOT_CHAT_IDLE_MS.min + this.random() * (BOT_CHAT_IDLE_MS.max - BOT_CHAT_IDLE_MS.min) }
 
-  private queue(cue: BotChatCue, priority: number, speakerId?: string, replyTo?: string, directed = false, choice?: string, initiative = false) {
+  private queue(cue: BotChatCue, priority: number, speakerId?: string, replyTo?: string, directed = false, choice?: string, initiative = false, options: ReplyOptions = {}) {
     const { botIds, active, context } = this.snapshot
     if (!active || !botIds.length || (this.pending && this.pending.priority >= priority && !(replyTo && this.pending.priority === priority))) return
     if (cue === "gamble" && this.random() >= .35) return
@@ -262,7 +278,7 @@ export class BotChatter {
     const available = candidates.length ? candidates : botIds
     const botId = speakerId && botIds.includes(speakerId) ? speakerId : available[Math.floor(this.random() * available.length)]!
     this.cancel()
-    this.pending = { botId, cue, context: replyTo && !gameTopics.has(cue) ? undefined : context, priority, replyTo, choice, initiative }
+    this.pending = { botId, cue, context: replyTo && !gameTopics.has(cue) ? undefined : context, priority, replyTo, choice, initiative, ...options }
     const delay = Math.max(remaining, BOT_CHAT_DELAY_MS.min + this.random() * (BOT_CHAT_DELAY_MS.max - BOT_CHAT_DELAY_MS.min))
     this.timer = setTimeout(() => {
       const pending = this.pending
@@ -273,14 +289,19 @@ export class BotChatter {
       const choices = fresh.length ? fresh : lines[pending.cue].filter(line => line !== this.recentLines.at(-1))
       const clean = choices.filter(line => !swear.test(line))
       const spicy = choices.filter(line => swear.test(line))
-      const useSwear = !swear.test(this.recentLines.at(-1) ?? "") && this.random() < .2
+      const useSwear = pending.forceSwear || (!this.lastWasSwear && this.random() < .2)
       const pool = useSwear && spicy.length ? spicy : clean.length ? clean
         : lines[pending.cue].filter(line => !swear.test(line) && line !== this.recentLines.at(-1))
       const template = pool[Math.floor(this.random() * pool.length)]!
       // Choices are canonical words from the local catalogs, never arbitrary player text.
-      const text = template.replaceAll("{choice}", pending.choice ?? "that")
+      let text = template.replaceAll("{choice}", pending.choice ?? "that")
+      if (pending.forceSwear && !swear.test(text)) {
+        const prefixes = ["damn, ", "shit, ", "well shit, ", "fuckin' hell, "]
+        text = prefixes[Math.floor(this.random() * prefixes.length)]! + text
+      }
       this.lastAt = Date.now()
       this.lastSpeaker = pending.botId
+      this.lastWasSwear = swear.test(text)
       this.recentLines = [...this.recentLines, template].slice(-8)
       this.nextInitiativeAt = this.nextIdle()
       const awaiting = questions[pending.cue]
@@ -295,6 +316,15 @@ export class BotChatter {
         if (this.replies.size > 32) this.replies.delete(this.replies.keys().next().value!)
       }
       this.post(pending.botId, text)
+      // Never feed bot messages through hear(): only humans reset idle budgets or
+      // personal conversation memory. A side exchange gets at most two replies.
+      const depth = pending.exchangeDepth ?? 0
+      const reply = peerReplies[pending.cue]
+      const peers = this.snapshot.botIds.filter(id => id !== pending.botId)
+      if (!this.pending && reply && peers.length && depth < 2 && this.random() >= .6) {
+        const peer = peers[Math.floor(this.random() * peers.length)]!
+        this.queue(reply, 1, peer, undefined, true, undefined, false, { exchangeDepth: depth + 1, exchangeFrom: pending.botId })
+      }
     }, delay)
   }
 

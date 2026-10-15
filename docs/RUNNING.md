@@ -133,10 +133,15 @@ unanswered prompts, bots wait for human chat before starting another conversatio
 
 Replies use local topic matching and curated lines, with no external AI service.
 They cannot hold arbitrary free-form conversations or reveal private hands.
-Swearing is occasional and never occurs in consecutive bot messages. Only one
+Swearing is occasional by default. When a player swears, their bot reply always
+includes a swear too, even in consecutive replies; it uses curated language
+rather than copying the player's message. Only one
 bot speaks at a time, with a short delay, a 10-second ambient cooldown, and a
-5-second cooldown for directed replies and follow-ups. Bots
-don't reply to each other, and stale remarks are dropped when a round changes.
+5-second cooldown for directed replies and follow-ups. Bots sometimes answer
+each other's questions or react to their table talk, with at most two extra
+replies per exchange and at least five seconds between messages. Any human
+message interrupts the side exchange. Bot replies don't reset the unanswered
+prompt limit, and stale side exchanges are dropped when a round changes.
 Bot messages have a **Bot** label and share the same bounded room history.
 Stand-ins for absent humans never chat under those players' names.
 
