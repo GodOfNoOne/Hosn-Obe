@@ -24,6 +24,7 @@ import {
 } from "@hosn-obe/shared"
 
 import { log } from "./log.js"
+import { registerChat } from "./chat.js"
 import { RoomError, RoomManager } from "./rooms.js"
 
 const PORT = Number(process.env.PORT) || 3000
@@ -51,7 +52,8 @@ io.use((socket, next) => {
   else next(new Error(OUTDATED_CLIENT_ERROR))
 })
 
-const rooms = new RoomManager()
+const rooms = new RoomManager(event => io.to(event.code).emit("chat:message", event))
+setInterval(() => rooms.botChatPulse(), 5000).unref()
 
 /** Arm bot/turn/round timers, then push room + per-seat game state (with the turn countdown) to everyone. */
 function sync(code: string): void {
@@ -83,6 +85,8 @@ io.on("connection", (socket) => {
   socket.on("error", (err) => {
     socket.emit("room:error", { message: err.message })
   })
+
+  registerChat(io, socket, rooms)
 
   function leaveCurrent(): void {
     const left = rooms.leaveRoom(socket.id)

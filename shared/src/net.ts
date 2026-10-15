@@ -6,6 +6,24 @@
 
 import type { GameAction, GameView } from "./game.js"
 
+export const CHAT_LIMITS = { maxLength: 300, history: 50, cooldownMs: 1000 } as const
+
+export interface ChatMessage {
+  id: string
+  playerId: string
+  name: string
+  text: string
+  sentAt: number
+  /** Only the server can mark messages from dedicated bot seats. */
+  isBot?: true
+}
+
+export interface ChatEvent { code: string; message: ChatMessage }
+export type ChatSendResult = { ok: true; message: ChatMessage } | { ok: false; error: string }
+export type ChatHistoryResult =
+  | { ok: true; code: string; messages: ChatMessage[] }
+  | { ok: false; error: string }
+
 export type BotLevel = "easy" | "normal" | "hard"
 export const BOT_LEVELS: readonly BotLevel[] = ["easy", "normal", "hard"]
 
@@ -78,6 +96,8 @@ export function startBlocker(room: RoomState): string | null {
 
 /** Events the client emits to the server. */
 export interface ClientToServerEvents {
+  "chat:send": (payload: { text: string }, ack: (result: ChatSendResult) => void) => void
+  "chat:history": (ack: (result: ChatHistoryResult) => void) => void
   "room:create": (
     payload: { name: string; maxPlayers?: number },
     ack: (result: RoomActionResult) => void,
@@ -106,6 +126,7 @@ export interface ClientToServerEvents {
 
 /** Events the server pushes to clients. */
 export interface ServerToClientEvents {
+  "chat:message": (event: ChatEvent) => void
   "room:state": (room: RoomState) => void
   "room:closed": (payload: { reason: string }) => void
   "room:error": (payload: { message: string }) => void

@@ -18,6 +18,7 @@ import {
   type PracticeSnapshot,
 } from "./practice.js"
 import { Room } from "./Room.js"
+import { RoomChat } from "./RoomChat.js"
 import {
   clearToken,
   forgetSeat,
@@ -139,6 +140,8 @@ export function App() {
 
   const backRef = useRef(() => {})
   backRef.current = () => {
+    const dialog = document.querySelector<HTMLDialogElement>("dialog[open]")
+    if (dialog) { dialog.close(); return }
     if (practice || room) confirmLeave()
     else if (screen !== "home") setScreen("home")
     else exitApp()
@@ -324,6 +327,7 @@ export function App() {
           onReturn={returnToGame}
         />
       )}
+      {!practice && room && <RoomChat key={room.code} room={room} youId={youId} connected={connected} />}
     </div>
   )
 }

@@ -11,6 +11,7 @@ import { randomBytes, randomInt, randomUUID } from "node:crypto"
 import {
   applyAction,
   BOT_LEVELS,
+  CHAT_LIMITS,
   chooseBotAction,
   convertToBot,
   convertToHuman,
@@ -22,6 +23,8 @@ import {
   startRound,
   viewFor,
   type BotLevel,
+  type ChatMessage,
+  type ChatEvent,
   type GameAction,
   type GameState,
   type GameView,
@@ -31,6 +34,7 @@ import {
 } from "@hosn-obe/shared"
 
 import { log, q } from "./log.js"
+import { BotChatter, type BotChatMoment } from "./bot-chat.js"
 
 /** A rejected room operation; the message is safe to show to the user. */
 export class RoomError extends Error {}
@@ -48,9 +52,13 @@ interface Member {
   /** Secret that lets a new connection reclaim this seat. */
   token: string
   socketId: string | null
+  lastChatAt: number | null
 }
 
 interface ServerRoom extends RoomState {
+  chat: ChatMessage[]
+  botChatter: BotChatter
+  gameRun: number
   members: Map<string, Member>
   game: GameState | null
   timer: ReturnType<typeof setTimeout> | null
@@ -186,6 +194,8 @@ export class RoomManager {
   private readonly sockets = new Map<string, Session>()
   private readonly tokens = new Map<string, Session>()
 
+  constructor(private readonly onBotChat: (event: ChatEvent) => void = () => {}) {}
+
   createRoom(
     socketId: string,
     name: unknown,
@@ -203,6 +213,9 @@ export class RoomManager {
       seats: Array(size).fill(null),
       spectators: [],
       phase: "lobby",
+      chat: [],
+      botChatter: new BotChatter((botId, text) => this.postBotChat(code, botId, text)),
+      gameRun: 0,
       members: new Map(),
       game: null,
       timer: null,
@@ -456,6 +469,7 @@ export class RoomManager {
       secureRandom,
     )
     room.phase = "playing"
+    room.gameRun++
     room.deadline = null
     const players = room.game.players.map((p) =>
       p.isBot ? `${q(p.name)} (${p.botLevel})` : q(p.name),
@@ -499,6 +513,7 @@ export class RoomManager {
   schedule(code: string, onStep: (code: string) => void): void {
     const room = this.rooms.get(code)
     if (!room) return
+    this.updateBotChatter(room)
     const game = room.game
     if (!game) {
       this.clearFireTimers(room)
@@ -640,6 +655,84 @@ export class RoomManager {
     return this.rooms.get(code) ?? null
   }
 
+  botChatPulse(): void {
+    for (const room of this.rooms.values()) {
+      this.updateBotChatter(room)
+      room.botChatter.tick()
+    }
+  }
+
+  chatHistory(socketId: string): { code: string; messages: ChatMessage[] } {
+    const { room } = this.memberRoom(socketId)
+    return { code: room.code, messages: room.chat.map(message => ({ ...message })) }
+  }
+
+  sendChat(socketId: string, raw: unknown): { code: string; message: ChatMessage } {
+    const { room, playerId } = this.memberRoom(socketId)
+    const member = room.members.get(playerId)
+    const player = findPlayer(room, playerId)
+    if (!member || member.socketId !== socketId || !player || player.isBot || !player.connected)
+      throw new RoomError("You are not in a room.")
+    if (typeof raw !== "string" || raw.length > CHAT_LIMITS.maxLength)
+      throw new RoomError(`Messages must be ${CHAT_LIMITS.maxLength} characters or fewer.`)
+    const text = raw.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").trim()
+    if (!text) throw new RoomError("Write a message first.")
+    const now = Date.now()
+    if (member.lastChatAt !== null && now - member.lastChatAt < CHAT_LIMITS.cooldownMs)
+      throw new RoomError("Wait a moment before sending another message.")
+    const message: ChatMessage = { id: randomUUID(), playerId, name: player.name, text, sentAt: now }
+    member.lastChatAt = now
+    room.chat.push(message)
+    if (room.chat.length > CHAT_LIMITS.history) room.chat.shift()
+    this.updateBotChatter(room)
+    const address = text.match(/\bbot\s*(\d+)\b/i)
+    const addressed = address ? room.seats.find(p => p?.isBot && p.id.startsWith("bot:") && p.name.toLowerCase() === `bot ${Number(address[1])}`) : undefined
+    room.botChatter.hear(text, playerId, addressed?.id)
+    return { code: room.code, message: { ...message } }
+  }
+
+  /** Only dedicated bots speak; stand-ins must never chat using a human's name. */
+  private postBotChat(code: string, botId: string, text: string): void {
+    const room = this.rooms.get(code)
+    const bot = room?.seats.find(p => p?.id === botId && p.isBot && p.id.startsWith("bot:"))
+    if (!room || !bot || !humans(room).some(p => p.connected)) return
+    const message: ChatMessage = { id: randomUUID(), playerId: bot.id, name: bot.name, text, sentAt: Date.now(), isBot: true }
+    room.chat.push(message)
+    if (room.chat.length > CHAT_LIMITS.history) room.chat.shift()
+    this.onBotChat({ code, message: { ...message } })
+  }
+
+  private updateBotChatter(room: ServerRoom): void {
+    const bots = seatedPlayers(room).filter(p => p.isBot && p.id.startsWith("bot:"))
+    const game = room.game
+    let moment: BotChatMoment | undefined
+    if (game) {
+      const key = `${room.gameRun}:${game.seq}`
+      const winner = game.winnerIdx === null ? undefined : game.players[game.winnerIdx]
+      if (game.phase === "gameEnd") {
+        const botWinner = bots.find(bot => bot.id === winner?.id)
+        moment = { key, cue: botWinner ? "win" : "gg", speakerId: botWinner?.id }
+      } else if (game.phase === "roundEnd") {
+        const loser = bots.find(bot => game.result?.losers.some(seat => game.players[seat]?.id === bot.id))
+        moment = { key, cue: loser ? "loss" : "result", speakerId: loser?.id }
+      } else if (game.lastEvent.type === "deal") {
+        moment = { key, cue: game.round === 1 ? "start" : "round" }
+      } else if (game.lastEvent.type === "knock") {
+        const actor = game.players[game.lastEvent.seat]
+        const bot = bots.find(bot => bot.id === actor?.id)
+        moment = { key, cue: bot ? "ownKnock" : "knock", speakerId: bot?.id }
+      } else if ((game.lastEvent.type === "swap" || game.lastEvent.type === "swapAll") && game.lastEvent.pool === "down") {
+        moment = { key, cue: "gamble" }
+      }
+    }
+    room.botChatter.update({
+      botIds: bots.map(bot => bot.id), active: humans(room).some(p => p.connected),
+      humanCount: humans(room).filter(p => p.connected).length,
+      lobby: room.phase === "lobby",
+      context: game ? `${room.gameRun}:${game.round}:${game.phase === "roundEnd" || game.phase === "gameEnd" ? game.phase : "active"}` : "lobby", moment,
+    })
+  }
+
   getGame(code: string): GameState | null {
     return this.rooms.get(code)?.game ?? null
   }
@@ -671,7 +764,7 @@ export class RoomManager {
       ready: false,
       connected: true,
     }
-    room.members.set(id, { token, socketId })
+    room.members.set(id, { token, socketId, lastChatAt: null })
     const session = { code: room.code, playerId: id }
     this.sockets.set(socketId, session)
     this.tokens.set(token, session)
@@ -728,6 +821,7 @@ export class RoomManager {
   }
 
   private deleteRoom(room: ServerRoom): void {
+    room.botChatter.dispose()
     this.clearTimer(room)
     this.clearFireTimers(room)
     for (const member of room.members.values()) {

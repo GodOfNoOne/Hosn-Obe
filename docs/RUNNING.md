@@ -92,6 +92,59 @@ To play "multiplayer" on one PC:
 
 ---
 
+### Room chat
+
+Online rooms have a circular **Room chat** button at the bottom right. It opens
+a popup over the lobby or game, with a small red dot when new messages arrive.
+Players and spectators share one conversation across starting a game, returning
+to the lobby, and reconnecting. The panel shows author names, local timestamps,
+and the unread count in the button's accessible label. Opening chat clears the
+dot. Close with the X, a tap outside, Escape, or Android Back; your draft is kept.
+The popup adapts to the viewport and keyboard. Enter sends; Shift+Enter adds a new line.
+Messages are plain text, limited to 300 characters and one message per second.
+The latest 50 messages are kept in memory while the room exists; restarting the
+server or closing the room clears them. Practice and tutorial do not have chat.
+
+To check it manually, join the same room in two tabs, send messages from both,
+start a game, then return to the lobby. The conversation should remain. Close
+chat in one tab and send from the other to check the red notification dot. Reconnect a
+tab to check missed messages, and join a different room to confirm its history
+is separate. Run `npm test` for server delivery and client reconnect/UI checks.
+
+Both the server and client need this feature deployed to use chat. The socket
+events are additive, so older clients can still play without chat.
+
+Dedicated bot seats have a laid-back, slightly stoner voice: short casual lines,
+light trash talk, and occasional mild swearing. They react to public game events
+and sometimes join conversations about snacks, mood, bad luck, rematches, jokes,
+or the game. Addressing **Bot 2** selects that bot to answer. Short follow-ups
+like "really?" or "why?" use that player's recent exchange with the same bot.
+Casual conversations last up to two minutes and survive new rounds; game-specific
+advice is cleared when the round changes. At a one-human table, ordinary sentences
+also get a response without naming a bot. At a shared table, bots are selective
+about joining in; direct addresses and ongoing conversations get priority.
+
+Directed replies wait for the cooldown instead of being discarded, and a newer
+message replaces an unsent reply. After roughly 40–75 seconds of quiet, a bot may
+ask the table about snacks, music, their day, or play style. Players can answer
+directly (for example, "Doritos", "Pink Floyd", or "reckless") without greetings
+or trigger phrases. The most recent question takes precedence. After two
+unanswered prompts, bots wait for human chat before starting another conversation.
+
+Replies use local topic matching and curated lines, with no external AI service.
+They cannot hold arbitrary free-form conversations or reveal private hands.
+Swearing is occasional by default. When a player swears, their bot reply always
+includes a swear too, even in consecutive replies; it uses curated language
+rather than copying the player's message. Only one
+bot speaks at a time, with a short delay, a 10-second ambient cooldown, and a
+5-second cooldown for directed replies and follow-ups. Bots sometimes answer
+each other's questions or react to their table talk, with at most two extra
+replies per exchange and at least five seconds between messages. Any human
+message interrupts the side exchange. Bot replies don't reset the unanswered
+prompt limit, and stale side exchanges are dropped when a round changes.
+Bot messages have a **Bot** label and share the same bounded room history.
+Stand-ins for absent humans never chat under those players' names.
+
 ## 4. Simulate on a real Android phone
 
 The phone must be on the **same Wi-Fi/LAN** as the PC so it can reach the server.
