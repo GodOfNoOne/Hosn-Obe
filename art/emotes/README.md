@@ -1,20 +1,35 @@
 # Card emote artwork
 
-Original raster card characters generated with the built-in imagegen tool.
-The game displays PNG thumbnails in the picker and real transparent GIFs for reactions.
-Reduced-motion users see still images. Each GIF contains sixteen frames, lasts
-2.4 seconds and loops. Reactions disappear after the existing 2.5-second lifetime.
+The current designs are original SVG playing-card characters in
+`client/src/CardEmoteArtwork.tsx`, with motion in `client/src/emotes.css`.
+They share a bright white card face, a slim cool gray edge, navy linework,
+and real corner ranks and suits. The vector art stays sharp at any display size.
 
-The source sheets contain eight poses in a 4 by 2 grid. Re-export with Pillow:
+Each reaction animates its own parts directly:
 
-```sh
-python scripts/build_emote_gifs.py art/emotes client/src/assets/emotes
-```
+- Laughing: two small laugh bounces, with a changing mouth opening.
+- Angry: a short huff, a brow furrow, and steam that expands and fades.
+- Crying: a quiet sob, a trembling mouth, and staggered falling tears.
+- Good game: a gentle nod, an occasional blink, and mint/blue sparkles.
 
-Replace GIF and PNG assets to change an emote; no drawing or animation code
-needs to change in React. Source sheets remain outside the client bundle.
+CSS interpolates the motion at the display's refresh rate. There are no generated
+video frames, optical-flow morphs, palette reductions, or image export steps.
+The picker shows the same artwork without motion. `prefers-reduced-motion`
+disables all character animations. The existing 2.5-second reaction lifetime,
+cooldown, mute control, and network events are unchanged.
 
-## Generation prompts
+Run `npm run dev:client` and open `/emote-preview.html` on the client dev server
+to review all four designs, pause/replay motion, and inspect small previews
+against a light background. `design-preview.png` is a static design contact sheet.
+
+## Legacy raster artwork
+
+The generated sheets in this directory and the GIF/PNG assets in
+`client/src/assets/emotes` are retained as historical source material. They are
+not imported by the current client. `scripts/build_emote_gifs.py` only exports
+that legacy artwork.
+
+### Original generation prompts (archived)
 
 Create an animation sprite sheet for an original mobile card-game reaction emote. EXACTLY eight frames arranged in a precise 4-column x 2-row grid of equal square cells, ordered left to right then top row to bottom row. Every cell contains the SAME full cream-colored playing card character with thick dark navy cartoon outlines, softly shaded golden edges, rounded corners, tiny suit symbols in opposite corners, and a large expressive face. No arms or legs. Charming polished cartoon game-sticker artwork, bold and readable at 100px. Same card proportions, scale, camera, and centered position in ALL eight frames, entire card visible with 15% padding inside each cell. Genuinely transparent background, no grid lines, no captions or frame numbers, no shadows outside the character. Create successive animation poses, not unrelated designs. Frames must form a seamless continuous loop, last pose returns toward first. 
 

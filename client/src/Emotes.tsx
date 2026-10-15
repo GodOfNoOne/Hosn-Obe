@@ -1,35 +1,14 @@
 import { useEffect, useRef, useState } from "react"
 import { EMOTE_IDS, EMOTE_DURATION_MS, EMOTE_COOLDOWN_MS, type EmoteId, type EmoteEvent } from "@hosn-obe/shared"
 import type { RoomCommands } from "./commands.js"
-import laughingGif from "./assets/emotes/laughing.gif"
-import laughingStill from "./assets/emotes/laughing.png"
-import angryGif from "./assets/emotes/angry.gif"
-import angryStill from "./assets/emotes/angry.png"
-import cryingGif from "./assets/emotes/crying.gif"
-import cryingStill from "./assets/emotes/crying.png"
-import ggGif from "./assets/emotes/gg.gif"
-import ggStill from "./assets/emotes/gg.png"
+import { CardEmoteArtwork } from "./CardEmoteArtwork.js"
 import "./emotes.css"
 
 const labels: Record<EmoteId, string> = { laughing: "Laughing", angry: "Angry", crying: "Crying", gg: "Good game" }
 type Reaction = EmoteEvent & { key: number }
 
-/** File-backed emotes: still previews in the picker, GIF playback for reactions. */
-const assets = {
-  laughing: { gif: laughingGif, still: laughingStill },
-  angry: { gif: angryGif, still: angryStill },
-  crying: { gif: cryingGif, still: cryingStill },
-  gg: { gif: ggGif, still: ggStill },
-} satisfies Record<EmoteId, { gif: string; still: string }>
-
 export function CardEmote({ emote, animated = false, replayKey }: { emote: EmoteId; animated?: boolean; replayKey?: number }) {
-  const asset = assets[emote]
-  // A fresh URL restarts the GIF when the same reaction is sent again.
-  const src = animated ? `${asset.gif}?play=${replayKey ?? 0}` : asset.still
-  return <picture>
-    <source media="(prefers-reduced-motion: reduce)" srcSet={asset.still} />
-    <img className="card-emote" src={src} alt={labels[emote]} width={256} height={256} draggable={false} />
-  </picture>
+  return <CardEmoteArtwork key={replayKey} emote={emote} animated={animated} />
 }
 
 export function useEmotes(commands: RoomCommands) {
