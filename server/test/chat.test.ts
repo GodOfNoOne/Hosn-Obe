@@ -118,7 +118,7 @@ describe("chat socket delivery", () => {
   it("delivers once to the sender and their room, never to another room or a departed socket", async () => {
     const http = createServer()
     io = new Server<ClientToServerEvents, ServerToClientEvents>(http)
-    const rooms = new RoomManager()
+    const rooms = new RoomManager(event => io!.to(event.code).emit("chat:message", event))
     const sockets = new Map<string, ServerSocket<ClientToServerEvents, ServerToClientEvents>>()
     io.on("connection", socket => { sockets.set(socket.id, socket); registerChat(io!, socket, rooms) })
     await new Promise<void>(resolve => http.listen(0, "127.0.0.1", resolve))
@@ -150,5 +150,15 @@ describe("chat socket delivery", () => {
     expect(await departed.timeout(1000).emitWithAck("chat:send", { text: "No membership" })).toMatchObject({ ok: false })
     expect(await alice.timeout(1000).emitWithAck("chat:send", { text: "Too fast" })).toMatchObject({ ok: false })
     expect(await alice.timeout(1000).emitWithAck("chat:send", { text: "x".repeat(301) })).toMatchObject({ ok: false })
+
+    const botReply = new Promise<ChatEvent>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Bot did not speak")), 3000)
+      bob.once("chat:message", event => { clearTimeout(timer); resolve(event) })
+    })
+    rooms.addBot(alice.id!, 2, "normal")
+    rooms.schedule(host.code, () => {})
+    expect((await botReply).message).toMatchObject({ name: "Bot 1", isBot: true })
+    await Promise.all([alice, bob, outsider, departed].map(socket => socket.timeout(1000).emitWithAck("chat:history")))
+    expect(received.map(events => events.length)).toEqual([2, 2, 0, 0])
   })
 })

@@ -114,6 +114,7 @@ export function RoomChat({ room, youId, connected }: { room: RoomState; youId: s
         {messages.length === 0 && <p className="chat-empty">{connected && !ready && !historyError ? "Loading chat…" : "Say hello to the table."}</p>}
         {messages.map(message => <article className={`chat-message${message.playerId === youId ? " chat-message--you" : ""}`} key={message.id}>
           <div className="chat-meta"><bdi className="chat-author">{message.playerId === youId ? "You" : message.name}</bdi>
+            {message.isBot && <span className="chat-bot-label">Bot</span>}
             <time dateTime={new Date(message.sentAt).toISOString()}>{new Date(message.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
           </div>
           <p dir="auto">{message.text}</p>

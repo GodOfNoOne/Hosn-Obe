@@ -111,6 +111,15 @@ is separate. Run `npm test` for server delivery and client reconnect/UI checks.
 Both the server and client need this feature deployed to use chat. The socket
 events are additive, so older clients can still play without chat.
 
+Dedicated bot seats join in with calm, playful table banter: introductions,
+knocks, round results, wins, and occasional replies to greetings, "gg", "ready",
+compliments, or bad-luck comments. They use curated lines based on public events;
+there is no AI API or hidden-card information in the dialogue. Only one bot
+speaks at a time, with a short delay and a 10-second room-wide cooldown. Bots
+don't reply to each other, and stale remarks are dropped when a round changes.
+Bot messages have a **Bot** label and share the same bounded room history.
+Stand-ins for absent humans never chat under those players' names.
+
 ## 4. Simulate on a real Android phone
 
 The phone must be on the **same Wi-Fi/LAN** as the PC so it can reach the server.

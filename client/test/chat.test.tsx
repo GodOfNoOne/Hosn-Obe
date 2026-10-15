@@ -38,6 +38,12 @@ beforeEach(() => { wire.socket.connected = true; wire.histories.length = 0; wire
 afterEach(cleanup)
 
 describe("room chat interface", () => {
+  it("labels automated messages as bots", () => {
+    render(<RoomChat room={room} youId="alice" connected />)
+    history([{ ...message(1, "Calm face, questionable luck.", "bot:one"), name: "Bot 1", isBot: true }])
+    expect(screen.getByText("Bot 1")).toBeTruthy()
+    expect(screen.getByText("Bot", { selector: ".chat-bot-label" })).toBeTruthy()
+  })
   it("sends with Enter, renders text safely and deduplicates the sender's echo", () => {
     const { container } = render(<RoomChat room={room} youId="alice" connected />)
     history()

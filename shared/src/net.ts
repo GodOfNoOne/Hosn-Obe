@@ -14,6 +14,8 @@ export interface ChatMessage {
   name: string
   text: string
   sentAt: number
+  /** Only the server can mark messages from dedicated bot seats. */
+  isBot?: true
 }
 
 export interface ChatEvent { code: string; message: ChatMessage }

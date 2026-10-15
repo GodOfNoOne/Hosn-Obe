@@ -52,7 +52,7 @@ io.use((socket, next) => {
   else next(new Error(OUTDATED_CLIENT_ERROR))
 })
 
-const rooms = new RoomManager()
+const rooms = new RoomManager(event => io.to(event.code).emit("chat:message", event))
 
 /** Arm bot/turn/round timers, then push room + per-seat game state (with the turn countdown) to everyone. */
 function sync(code: string): void {

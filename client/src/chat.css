@@ -11,6 +11,7 @@
 .chat-message--you { margin-left: auto; border-radius: 10px 10px 2px 10px; background: #173d37; }
 .chat-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: .7rem; }
 .chat-author { font-weight: 700; color: #aebfff; overflow-wrap: anywhere; }
+.chat-bot-label { padding: 0 4px; border: 1px solid #7785aa; border-radius: 4px; color: #becbdf; font-size: .6rem; }
 .chat-message--you .chat-author { color: #95dfbb; }
 .chat-meta time { color: #a5b0c4; font-size: .65rem; margin-left: auto; }
 .chat-message p { margin: 3px 0 0; font-size: .85rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
